@@ -5,7 +5,7 @@ Sistema web para gerenciamento de pagamentos da Crisma.
 ## Como usar:
 1. Abra o index.html
 2. Adicione a logomarca
-3. Importe dados via Excel ou adicione manualmente
+3. Importe dados via banco supabase com planilha Excel
 4. Registre pagamentos e gere comprovantes
 
 ## Funcionalidades:
