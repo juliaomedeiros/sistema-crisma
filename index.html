@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema Crisma - Santuário Mãe Rainha</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  </head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo-container">
+                <div class="logo-upload" >
+                    <img src="assets/mae rainha-1.png" width="150" height="150"  alt="Logo Santuário Mãe Rainha">
+                </div>
+            </div>
+            <h1>Santuário Mãe Rainha</h1>
+            <h2>Sistema de Gestão de Pagamentos - Crisma de Adultos 2025</h2>
+        </div>
+
+        <div class="main-content">
+            <!-- Estatísticas -->
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-number" id="totalCrismandos">0</div>
+                    <div>Total de Crismandos</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="pagamentosHoje">0</div>
+                    <div>Pagamentos Hoje</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="totalArrecadado">R$ 0,00</div>
+                    <div>Total Arrecadado</div>
+                </div>
+            </div>
+
+            <!-- Upload de Planilha
+            <div class="section">
+                <h3>📊 Upload da Planilha</h3>
+                <div class="form-group">
+                    <label for="excelFile">Selecione a planilha Excel (.xlsx, .xls):</label>
+                    <input type="file" id="excelFile" accept=".xlsx,.xls">
+                </div>
+                <button class="btn btn-primary" onclick="loadExcel()">📤 Carregar Dados</button>
+            </div> -->
+           
+            <!-- Registrar Pagamento -->
+            <div class="section">
+                <h3>💰 Registrar Pagamento</h3>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="selectCrismando">Crismando:</label>
+                        <select id="selectCrismando">
+                            <option value="">Selecione um crismando</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="mesPagamento">Mês do Pagamento:</label>
+                        <select id="mesPagamento">
+                            <option value="Janeiro">Janeiro</option>
+                            <option value="Fevereiro">Fevereiro</option>
+                            <option value="Março">Março</option>
+                            <option value="Abril">Abril</option>
+                            <option value="Maio">Maio</option>
+                            <option value="Junho">Junho</option>
+                            <option value="Julho">Julho</option>
+                            <option value="Agosto">Agosto</option>
+                            <option value="Setembro">Setembro</option>
+                            <option value="Outubro">Outubro</option>
+                            <option value="Novembro">Novembro</option>
+                            <option value="Dezembro">Dezembro</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="valorPago">Valor Pago:</label>
+                        <input type="number" id="valorPago" placeholder="50.00" step="0.01">
+                    </div>
+                </div>
+                <div class="button-group">
+                    <button class="btn btn-success" onclick="registrarPagamento()">💰 Registrar Pagamento</button>
+                    <button class="btn btn-info" onclick="gerarComprovante()">🧾 Gerar Comprovante</button>
+                    <button class="btn btn-warning" onclick="enviarWhatsApp()">📱 Enviar WhatsApp</button>
+                </div>
+            </div>
+
+<!-- Relatório Mensal -->
+<div class="section">
+    <h3>📈 Relatório por Mês</h3>
+    
+    <div class="button-group">
+        <button class="btn btn-info" onclick="gerarRelatorio()">📊 Ver Relatório</button>
+        <button class="btn btn-success" onclick="baixarRelatorioExcel()">📥 Baixar Excel</button>
+        <button class="btn btn-primary" onclick="baixarRelatorioCompleto()">📋 Relatório Completo</button>
+    </div>
+    <div id="resultadoRelatorio"></div>
+</div>
+<!-- Seção de Validação de Telefones -->
+<div class="section">
+    <h3>📱 Validação de Telefones</h3>
+    <p>Verifique se todos os números de telefone estão corretos para envio via WhatsApp:</p>
+    <button class="btn btn-info" onclick="validarTelefonesCadastrados()">🔍 Validar Todos os Telefones</button>
+</div>
+
+<!-- Adicionar após a seção de relatórios -->
+<div class="section">
+    <h3>🔍 Validador de Comprovantes</h3>
+    <div class="form-group">
+        <label for="codigoValidacao">Código de Verificação:</label>
+        <input type="text" id="codigoValidacao" placeholder="Digite o código de 8 caracteres" maxlength="8" style="text-transform: uppercase;">
+    </div>
+    <div class="button-group">
+        <button class="btn btn-info" onclick="validarComprovante()">🔍 Validar Comprovante</button>
+          <button onclick="listarComprovantesValidos()" class="btn btn-info">Listar Comprovantes Válidos</button>
+    <div id="resultadoComprovantes" style="margin-top: 20px;"></div>
+    </div>
+    <div id="resultadoValidacao" style="margin-top: 20px;"></div>
+</div>
+
+ <!-- Adicionar Novo Crismando -->
+            <div class="section">
+                <h3>➕ Adicionar Novo Crismando</h3>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="novoNome">Nome:</label>
+                        <input type="text" id="novoNome" placeholder="Nome completo">
+                    </div>
+                    <div class="form-group">
+                        <label for="novoTelefone">Telefone:</label>
+                        <input type="tel" id="novoTelefone" placeholder="(11) 99999-9999">
+                    </div>
+                    <div class="form-group">
+                        <label for="novoValor">Valor Mensal:</label>
+                        <input type="number" id="novoValor" placeholder="50.00" step="0.01">
+                    </div>
+                </div>
+                <button class="btn btn-success" onclick="adicionarCrismando()">➕ Adicionar</button>
+            </div>
+
+            <!-- Tabela de Crismandos -->
+            <div class="section">
+                <h3>👥 Lista de Crismandos</h3>
+                <div class="table-container">
+                    <table id="tabelaCrismandos">
+                        <thead>
+                            <tr>
+                                <th>Nome</th>
+                                <th>Telefone</th>
+                                <th>Valor Mensal</th>
+                                <th>Último Pagamento</th>
+                                <th>Total Pago</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="corpoTabela">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+
+<!-- Modal para Comprovante -->
+<div id="modalComprovante" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="fecharModal()">&times;</span>
+        <div id="comprovanteContent"></div>
+        <div class="modal-buttons">
+            <button class="btn btn-warning" onclick="enviarComprovanteAutomatico()">📱 Enviar para WhatsApp</button>
+            <button class="btn btn-primary" onclick="baixarComprovante()">💾 Baixar PNG</button>
+            <button class="btn btn-success" onclick="imprimirComprovante()">🖨️ Imprimir</button>
+        </div>
+        <div style="margin-top: 15px; padding: 10px; background: #e8f5e8; border-radius: 5px; font-size: 12px; color: #2d5a2d;">
+            <strong>✅ Envio Automático Ativo!</strong><br>
+            • O comprovante será enviado para o número cadastrado na tabela<br>
+            • Verifique se o telefone está correto antes de enviar<br>
+            • Funciona em iPad, iPhone, Android e Desktop
+        </div>
+    </div>
+</div>
+
+
+<!-- Bibliotecas externas primeiro -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<!-- Scripts do sistema -->
+ <script src="env.js"></script>
+<script src="js/supabase-config.js"></script>
+<script src="js/data.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/comprovante.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
