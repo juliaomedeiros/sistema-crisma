@@ -403,7 +403,7 @@ class AuthSystem {
         <body>
             <div class="login-container">
                 <div class="login-header">
-                    <h1>🔐 Sistema de Gestão de pagamentos da Crisma</h1>
+                    <h1>🔐 Sistema de Gestão de Pagamentos da Crisma</h1>
                     <p>Santuário Mãe Rainha</p>
                 </div>
                 
