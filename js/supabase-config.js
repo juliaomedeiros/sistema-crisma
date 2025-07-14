@@ -1,3 +1,10 @@
+function initializeSupabase() {
+    // Verificar se ENV está disponível
+    if (typeof ENV === 'undefined') {
+        console.error('ENV não definido');
+        return null;
+    }
+}
 // Configuração do Supabase
 const SUPABASE_URL = ENV.SUPABASE_URL;
 const SUPABASE_ANON_KEY = ENV.SUPABASE_ANON_KEY;
