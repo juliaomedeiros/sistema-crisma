@@ -23,7 +23,7 @@ yarn-debug.log*
 yarn-error.log*
 
 # local env files
-env.js
+
 .env.local
 .env.development.local
 .env.test.local
@@ -103,7 +103,7 @@ web_modules/
 .yarn-integrity
 
 # dotenv environment variables file
-env.js
+
 .env
 .env.test
 .env.production
