@@ -62,9 +62,12 @@ document.addEventListener('DOMContentLoaded', async function() {
 
 // Função para debug - pode ser removida em produção
 function debugInfo() {
-    console.log('Crismandos:', crismandos);
-    console.log('Pagamentos:', pagamentos);
+    console.log('Crismandos: Carregador com sucesso', /*crismandos*/);
+    console.log('Pagamentos: Carregados com sucesso', /*pagamentos*/);
     console.log('Logo carregada:', logoBase64 ? 'Sim' : 'Não');
 }
+
+
+
 
 

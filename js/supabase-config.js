@@ -1,6 +1,12 @@
 // Configuração do Supabase
-const SUPABASE_URL = 'https://yqqpugheqqknpbetysme.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlxcXB1Z2hlcXFrbnBiZXR5c21lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAxOTkwNTUsImV4cCI6MjA2NTc3NTA1NX0.Q89vTdLgodaIsuLiIB6JijJPuzyrcRNPoTwUJ_gUQV4';
+const SUPABASE_URL = ENV.SUPABASE_URL;
+const SUPABASE_ANON_KEY = ENV.SUPABASE_ANON_KEY;
+
+// Verificar se as variáveis foram carregadas
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    console.error('Erro: Variáveis de ambiente não configuradas');
+    throw new Error('Configuração de banco de dados inválida');
+}
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
