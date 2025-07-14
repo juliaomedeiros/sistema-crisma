@@ -1,8 +1,9 @@
 // Inicialização do sistema
 document.addEventListener('DOMContentLoaded', async function() {
     console.log('🚀 Iniciando sistema...');
-    
-    // Testar conexão primeiro
+
+        
+    // Testar conexão 
     const conexaoOk = await testarConexao();
     
     if (conexaoOk) {
