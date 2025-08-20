@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,13 +10,14 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-  </head>
+</head>
+
 <body>
     <div class="container">
         <div class="header">
             <div class="logo-container">
-                <div class="logo-upload" >
-                    <img src="assets/mae rainha-1.png" width="150" height="150"  alt="Logo Santuário Mãe Rainha">
+                <div class="logo-upload">
+                    <img src="assets/mae rainha-1.png" width="150" height="150" alt="Logo Santuário Mãe Rainha">
                 </div>
             </div>
             <h1>Santuário Mãe Rainha</h1>
@@ -48,7 +50,7 @@
                 </div>
                 <button class="btn btn-primary" onclick="loadExcel()">📤 Carregar Dados</button>
             </div> -->
-           
+
             <!-- Registrar Pagamento -->
             <div class="section">
                 <h3>💰 Registrar Pagamento</h3>
@@ -87,41 +89,51 @@
                     <button class="btn btn-warning" onclick="enviarWhatsApp()">📱 Enviar WhatsApp</button>
                 </div>
             </div>
+            
+            <div class="section">
+                <h3>🔎 Pesquisar Crismando</h3>
+                <input type="text" id="inputPesquisarCrismando" placeholder="Digite o nome do crismando"
+                    style="width: 100%; padding: 10px; font-size: 16px; border-radius: 8px; border: 2px solid #ddd;">
+                <div id="resultadoPesquisa" style="margin-top: 20px;"></div>
+            </div>
 
-<!-- Relatório Mensal -->
-<div class="section">
-    <h3>📈 Relatório por Mês</h3>
-    
-    <div class="button-group">
-        <button class="btn btn-info" onclick="gerarRelatorio()">📊 Ver Relatório</button>
-        <button class="btn btn-success" onclick="baixarRelatorioExcel()">📥 Baixar Excel</button>
-        <button class="btn btn-primary" onclick="baixarRelatorioCompleto()">📋 Relatório Completo</button>
-    </div>
-    <div id="resultadoRelatorio"></div>
-</div>
-<!-- Seção de Validação de Telefones -->
-<div class="section">
-    <h3>📱 Validação de Telefones</h3>
-    <p>Verifique se todos os números de telefone estão corretos para envio via WhatsApp:</p>
-    <button class="btn btn-info" onclick="validarTelefonesCadastrados()">🔍 Validar Todos os Telefones</button>
-</div>
+            <!-- Relatório Mensal -->
+            <div class="section">
+                <h3>📈 Relatório por Mês</h3>
 
-<!-- Adicionar após a seção de relatórios -->
-<div class="section">
-    <h3>🔍 Validador de Comprovantes</h3>
-    <div class="form-group">
-        <label for="codigoValidacao">Código de Verificação:</label>
-        <input type="text" id="codigoValidacao" placeholder="Digite o código de 8 caracteres" maxlength="8" style="text-transform: uppercase;">
-    </div>
-    <div class="button-group">
-        <button class="btn btn-info" onclick="validarComprovante()">🔍 Validar Comprovante</button>
-          <button onclick="listarComprovantesValidos()" class="btn btn-info">Listar Comprovantes Válidos</button>
-    <div id="resultadoComprovantes" style="margin-top: 20px;"></div>
-    </div>
-    <div id="resultadoValidacao" style="margin-top: 20px;"></div>
-</div>
+                <div class="button-group">
+                    <button class="btn btn-info" onclick="gerarRelatorio()">📊 Ver Relatório</button>
+                    <button class="btn btn-success" onclick="baixarRelatorioExcel()">📥 Baixar Excel</button>
+                    <button class="btn btn-primary" onclick="baixarRelatorioCompleto()">📋 Relatório Completo</button>
+                </div>
+                <div id="resultadoRelatorio"></div>
+            </div>
+            <!-- Seção de Validação de Telefones -->
+            <div class="section">
+                <h3>📱 Validação de Telefones</h3>
+                <p>Verifique se todos os números de telefone estão corretos para envio via WhatsApp:</p>
+                <button class="btn btn-info" onclick="validarTelefonesCadastrados()">🔍 Validar Todos os
+                    Telefones</button>
+            </div>
 
- <!-- Adicionar Novo Crismando -->
+            <!-- Adicionar após a seção de relatórios -->
+            <div class="section">
+                <h3>🔍 Validador de Comprovantes</h3>
+                <div class="form-group">
+                    <label for="codigoValidacao">Código de Verificação:</label>
+                    <input type="text" id="codigoValidacao" placeholder="Digite o código de 8 caracteres" maxlength="8"
+                        style="text-transform: uppercase;">
+                </div>
+                <div class="button-group">
+                    <button class="btn btn-info" onclick="validarComprovante()">🔍 Validar Comprovante</button>
+                    <button onclick="listarComprovantesValidos()" class="btn btn-info">Listar Comprovantes
+                        Válidos</button>
+                    <div id="resultadoComprovantes" style="margin-top: 20px;"></div>
+                </div>
+                <div id="resultadoValidacao" style="margin-top: 20px;"></div>
+            </div>
+
+            <!-- Adicionar Novo Crismando -->
             <div class="section">
                 <h3>➕ Adicionar Novo Crismando</h3>
                 <div class="form-grid">
@@ -163,37 +175,40 @@
             </div>
 
 
-<!-- Modal para Comprovante -->
-<div id="modalComprovante" class="modal">
-    <div class="modal-content">
-        <span class="close" onclick="fecharModal()">&times;</span>
-        <div id="comprovanteContent"></div>
-        <div class="modal-buttons">
-            <button class="btn btn-warning" onclick="enviarComprovanteAutomatico()">📱 Enviar para WhatsApp</button>
-            <button class="btn btn-primary" onclick="baixarComprovante()">💾 Baixar PNG</button>
-            <button class="btn btn-success" onclick="imprimirComprovante()">🖨️ Imprimir</button>
-        </div>
-        <div style="margin-top: 15px; padding: 10px; background: #e8f5e8; border-radius: 5px; font-size: 12px; color: #2d5a2d;">
-            <strong>✅ Envio Automático Ativo!</strong><br>
-            • O comprovante será enviado para o número cadastrado na tabela<br>
-            • Verifique se o telefone está correto antes de enviar<br>
-            • Funciona em iPad, iPhone, Android e Desktop
-        </div>
-    </div>
-</div>
+            <!-- Modal para Comprovante -->
+            <div id="modalComprovante" class="modal">
+                <div class="modal-content">
+                    <span class="close" onclick="fecharModal()">&times;</span>
+                    <div id="comprovanteContent"></div>
+                    <div class="modal-buttons">
+                        <button class="btn btn-warning" onclick="enviarComprovanteAutomatico()">📱 Enviar para
+                            WhatsApp</button>
+                        <button class="btn btn-primary" onclick="baixarComprovante()">💾 Baixar PNG</button>
+                        <button class="btn btn-success" onclick="imprimirComprovante()">🖨️ Imprimir</button>
+                    </div>
+                    <div
+                        style="margin-top: 15px; padding: 10px; background: #e8f5e8; border-radius: 5px; font-size: 12px; color: #2d5a2d;">
+                        <strong>✅ Envio Automático Ativo!</strong><br>
+                        • O comprovante será enviado para o número cadastrado na tabela<br>
+                        • Verifique se o telefone está correto antes de enviar<br>
+                        • Funciona em iPad, iPhone, Android e Desktop
+                    </div>
+                </div>
+            </div>
 
 
-<!-- Bibliotecas externas primeiro -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+            <!-- Bibliotecas externas primeiro -->
+            <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
-<!-- Scripts do sistema -->
-<script src="env.js"></script>
-<script src="auth.js"></script>
-<script src="js/supabase-config.js"></script>
-<script src="js/data.js"></script>
-<script src="js/utils.js"></script>
-<script src="js/comprovante.js"></script>
-<script src="js/app.js"></script>
+            <!-- Scripts do sistema -->
+            <script src="env.js"></script>
+            <script src="auth.js"></script>
+            <script src="js/supabase-config.js"></script>
+            <script src="js/data.js"></script>
+            <script src="js/utils.js"></script>
+            <script src="js/comprovante.js"></script>
+            <script src="js/app.js"></script>
 </body>
+
 </html>
