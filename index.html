@@ -62,25 +62,35 @@
                         </select>
                     </div>
                     <div class="form-group">
+                        <!-- Campo selecionar mês -->
                         <label for="mesPagamento">Mês do Pagamento:</label>
-                        <select id="mesPagamento">
-                            <option value="Janeiro">Janeiro</option>
-                            <option value="Fevereiro">Fevereiro</option>
-                            <option value="Março">Março</option>
-                            <option value="Abril">Abril</option>
-                            <option value="Maio">Maio</option>
-                            <option value="Junho">Junho</option>
-                            <option value="Julho">Julho</option>
-                            <option value="Agosto">Agosto</option>
-                            <option value="Setembro">Setembro</option>
-                            <option value="Outubro">Outubro</option>
-                            <option value="Novembro">Novembro</option>
-                            <option value="Dezembro">Dezembro</option>
+                        <select id="mesPagamento" required>
+                            <option value="01">Janeiro</option>
+                            <option value="02">Fevereiro</option>
+                            <option value="03">Março</option>
+                            <option value="04">Abril</option>
+                            <option value="05">Maio</option>
+                            <option value="06">Junho</option>
+                            <option value="07">Julho</option>
+                            <option value="08">Agosto</option>
+                            <option value="09">Setembro</option>
+                            <option value="10">Outubro</option>
+                            <option value="11">Novembro</option>
+                            <option value="12">Dezembro</option>
+                        </select>
+
+                        <!-- Campo selecionar ano -->
+                        <label for="anoPagamento">Ano do Pagamento:</label>
+                        <select id="anoPagamento" required>
+                            <!-- Pode ajustar os anos conforme necessário -->
+                            <option value="2025" selected>2025</option>
+                            <option value="2026">2026</option>
+                            <option value="2027">2027</option>
                         </select>
                     </div>
                     <div class="form-group">
                         <label for="valorPago">Valor Pago:</label>
-                        <input type="number" id="valorPago" placeholder="50.00" step="0.01">
+                        <input type="number" id="valorPago" placeholder="10.00" step="0.01" value="10.00">
                     </div>
                 </div>
                 <div class="button-group">
@@ -89,7 +99,7 @@
                     <button class="btn btn-warning" onclick="enviarWhatsApp()">📱 Enviar WhatsApp</button>
                 </div>
             </div>
-            
+
             <div class="section">
                 <h3>🔎 Pesquisar Crismando</h3>
                 <input type="text" id="inputPesquisarCrismando" placeholder="Digite o nome do crismando"
@@ -153,7 +163,7 @@
                 <button class="btn btn-success" onclick="adicionarCrismando()">➕ Adicionar</button>
             </div>
 
-            <!-- Tabela de Crismandos -->
+            <!-- Tabela de Crismandos 
             <div class="section">
                 <h3>👥 Lista de Crismandos</h3>
                 <div class="table-container">
@@ -172,7 +182,7 @@
                         </tbody>
                     </table>
                 </div>
-            </div>
+            </div>-->
 
 
             <!-- Modal para Comprovante -->
