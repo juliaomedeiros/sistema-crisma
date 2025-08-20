@@ -875,3 +875,92 @@ function desativarCodigo(codigo) {
         }
     }
 }
+
+// Função para pesquisar crismandos pelo nome e retornar dados dos pagamentos
+function pesquisarCrismandoPorNome(nomePesquisa) {
+  const nomeMinusculo = nomePesquisa.toLowerCase().trim();
+
+  // Filtra crismandos cujo nome contenha o texto pesquisado
+  const crismandosFiltrados = crismandos.filter(c => c.nome.toLowerCase().includes(nomeMinusculo));
+
+  // Para cada crismando filtrado, buscar pagamentos, meses pagos e pendentes, e detalhes dos pagamentos
+  const resultado = crismandosFiltrados.map(c => {
+    const pagamentosCrismando = pagamentos.filter(p => p.crismando_id === c.id);
+
+    // Meses pagos
+    const mesesPagos = pagamentosCrismando.map(p => p.mes);
+
+    // Considera meses do ano (01 a 12) para checar pendentes
+    const mesesAno = Array.from({ length: 12 }, (_, i) => (i + 1).toString().padStart(2, '0'));
+
+    // Meses pendentes = meses do ano que não estão nos pagos
+    const mesesPendentes = mesesAno.filter(mes => !mesesPagos.includes(mes));
+
+    // Detalhes de pagamentos (mês, data, valor)
+    const pagamentosDetalhados = pagamentosCrismando.map(p => ({
+      mes: p.mes,
+      data: p.data || 'Não informado',
+      valor: p.valor
+    }));
+
+    return {
+      nome: c.nome,
+      telefone: c.telefone || '-',
+      mesesPagos,
+      mesesPendentes,
+      pagamentosDetalhados
+    };
+  });
+
+  return resultado;
+}
+
+// Função para mostrar os resultados da pesquisa na interface
+function mostrarResultadoPesquisa(nomePesquisa) {
+  const container = document.getElementById('resultadoPesquisa');
+  container.innerHTML = ''; // limpar resultados anteriores
+
+  if (!nomePesquisa || nomePesquisa.trim() === '') {
+    container.innerHTML = '<p>Digite o nome do crismando para pesquisar.</p>';
+    return;
+  }
+
+  const resultados = pesquisarCrismandoPorNome(nomePesquisa);
+
+  if (resultados.length === 0) {
+    container.innerHTML = `<p>Nenhum crismando encontrado com o nome "${nomePesquisa}".</p>`;
+    return;
+  }
+
+  // Construir HTML para cada crismando encontrado
+  resultados.forEach(res => {
+    const mesesPagosStr = res.mesesPagos.length > 0 ? res.mesesPagos.join(', ') : 'Nenhum pagamento registrado';
+    const mesesPendentesStr = res.mesesPendentes.length > 0 ? res.mesesPendentes.join(', ') : 'Nenhum mês pendente';
+
+    let pagamentosDetalhesHTML = '<ul>';
+    res.pagamentosDetalhados.forEach(p => {
+      pagamentosDetalhesHTML += `<li>Mês: ${p.mes}/2025 - Data: ${p.data} - Valor: R$ ${Number(p.valor).toFixed(2).replace('.', ',')}</li>`;
+    });
+    pagamentosDetalhesHTML += '</ul>';
+
+    container.innerHTML += `
+      <div style="border: 1px solid #ddd; padding: 15px; margin-bottom: 15px; border-radius: 8px; background: #f9f9f9;">
+        <h4>${res.nome} - Telefone: ${res.telefone}</h4>
+        <p><strong>Meses Pagos:</strong> ${mesesPagosStr}</p>
+        <p><strong>Meses Pendentes:</strong> ${mesesPendentesStr}</p>
+        <p><strong>Detalhes dos Pagamentos:</strong> ${pagamentosDetalhesHTML}</p>
+      </div>
+    `;
+  });
+}
+
+// Evento para pesquisar enquanto digita
+document.addEventListener('DOMContentLoaded', () => {
+  const inputPesquisa = document.getElementById('inputPesquisarCrismando');
+  if (inputPesquisa) {
+    inputPesquisa.addEventListener('input', (e) => {
+      mostrarResultadoPesquisa(e.target.value);
+    });
+  }
+});
+
