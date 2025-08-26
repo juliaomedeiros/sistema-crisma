@@ -208,7 +208,8 @@ async function registrarPagamento() {
     const dadosComprovante = gerarComprovanteAutomatico(
       crismandoId,
       nomeMes,
-      valor
+      valor,
+      parseInt(ano)
     );
     criarTemplateComprovante(dadosComprovante).then((imgData) => {
       window.dadosComprovanteAtual = dadosComprovante;
@@ -575,6 +576,7 @@ async function registrarCodigoAutenticacao(dadosComprovante, codigo) {
       crismando_id: dadosComprovante.crismando.id,
       nome_crismando: dadosComprovante.crismando.nome,
       mes: dadosComprovante.mes,
+      ano: dadosComprovante.ano,
       valor: dadosComprovante.valor,
       data_vencimento: new Date(
         Date.now() + 365 * 24 * 60 * 60 * 1000

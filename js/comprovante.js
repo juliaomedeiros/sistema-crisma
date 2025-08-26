@@ -1,5 +1,5 @@
 // Gerar comprovante automaticamente ao registrar pagamento
-function gerarComprovanteAutomatico(crismandoId, mes, valor) {
+function gerarComprovanteAutomatico(crismandoId, mes, valor, ano) {
     const crismando = crismandos.find(c => c.id == crismandoId);
     const versiculo = versiculos[Math.floor(Math.random() * versiculos.length)];
     const dataAtual = new Date().toLocaleDateString('pt-BR');
@@ -10,6 +10,7 @@ function gerarComprovanteAutomatico(crismandoId, mes, valor) {
         crismando,
         mes,
         valor,
+        ano: ano,
         dataAtual,
         versiculo,
         codigoAutenticacao
@@ -76,7 +77,7 @@ function criarTemplateComprovante(dadosComprovante) {
         // Dados do comprovante
         const dados = [
             `Nome: ${dadosComprovante.crismando.nome}`,
-            `Mês: ${dadosComprovante.mes}/2025`,
+            `Mês: ${dadosComprovante.mes}/${dadosComprovante.ano}`,
             `Valor: R$ ${dadosComprovante.valor.toFixed(2).replace('.', ',')}`,
             `Data: ${dadosComprovante.dataAtual}`,
             `Código: ${dadosComprovante.codigoAutenticacao}`
@@ -686,13 +687,14 @@ function gerarComprovante() {
     const crismandoId = document.getElementById('selectCrismando').value;
     const mes = document.getElementById('mesPagamento').value;
     const valor = parseFloat(document.getElementById('valorPago').value) || 0;
+    const ano = document.getElementById('anoPagamento').value;
     
     if (!crismandoId || !mes || valor <= 0) {
         alert('Por favor, preencha todos os campos antes de gerar o comprovante.');
         return;
     }
     
-    const dadosComprovante = gerarComprovanteAutomatico(crismandoId, mes, valor);
+    const dadosComprovante = gerarComprovanteAutomatico(crismandoId, mes, valor,ano);
     
     criarTemplateComprovante(dadosComprovante).then(imgData => {
         const comprovanteHTML = `
