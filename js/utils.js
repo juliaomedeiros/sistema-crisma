@@ -1017,7 +1017,7 @@ async function listarComprovantesValidos() {
                     }</td>
                     <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">${
                       codigo.mes
-                    }/2025</td>
+                    }/${codigo.ano}</td>
                     <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">R$ ${valorFormatado}</td>
                     <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">${dataFormatada}</td>
                     <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">
@@ -1122,6 +1122,7 @@ function pesquisarCrismandoPorNome(nomePesquisa) {
       }
       return {
         mes: p.mes,
+        ano: p.ano,
         data: dataFormatada,
         valor: p.valor,
       };
@@ -1169,7 +1170,7 @@ function mostrarResultadoPesquisa(nomePesquisa) {
 
     let pagamentosDetalhesHTML = "<ul>";
     res.pagamentosDetalhados.forEach((p) => {
-      pagamentosDetalhesHTML += `<li>Mês: ${p.mes}/2025 - Data: ${
+      pagamentosDetalhesHTML += `<li>Mês: ${p.mes}/${p.ano} - Data: ${
         p.data
       } - Valor: R$ ${Number(p.valor).toFixed(2).replace(".", ",")}</li>`;
     });
