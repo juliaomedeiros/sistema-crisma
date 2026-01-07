@@ -1,16 +1,17 @@
-// supabase-config.js - VERSÃO CORRIGIDA COMPLETA
-let supabase = null;
 
+// supabase-config.js - VERSÃO CORRIGIDA
+
+// Função para inicializar o Supabase (não declarar variável global aqui)
 function initializeSupabase() {
     try {
         console.log('🔄 Tentando inicializar Supabase...');
-        
+
         // Verificar se ENV está disponível
         if (typeof ENV === 'undefined') {
             console.error('❌ ENV não definido - arquivo env.js não foi carregado');
             return null;
         }
-        
+
         console.log('✅ ENV encontrado:', {
             hasUrl: !!ENV.SUPABASE_URL,
             hasKey: !!ENV.SUPABASE_ANON_KEY,
@@ -36,17 +37,22 @@ function initializeSupabase() {
             return null;
         }
 
-        // Criar cliente Supabase
-        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        
-        if (!supabase) {
+        // Criar ou retornar cliente Supabase existente
+        if (!window.supabaseClient) {
+            window.supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            console.log('✅ Novo cliente Supabase criado');
+        } else {
+            console.log('✅ Cliente Supabase já existente');
+        }
+
+        if (!window.supabaseClient) {
             console.error('❌ Falha ao criar cliente Supabase');
             return null;
         }
-        
+
         console.log('✅ Supabase inicializado com sucesso');
-        return supabase;
-        
+        return window.supabaseClient;
+
     } catch (error) {
         console.error('❌ Erro ao inicializar Supabase:', error);
         return null;
@@ -56,21 +62,25 @@ function initializeSupabase() {
 // Verificar conexão
 async function testarConexao() {
     try {
+        const supabase = getSupabaseClient();
+
         if (!supabase) {
             console.error('❌ Supabase não foi inicializado');
             return false;
         }
-        
+
         console.log('🔄 Testando conexão com banco...');
-        
+
         const { data, error } = await supabase.from('crismandos').select('count');
+
         if (error) {
             console.error('❌ Erro na consulta:', error);
             throw error;
         }
-        
+
         console.log('✅ Conexão com Supabase estabelecida com sucesso!');
         return true;
+
     } catch (error) {
         console.error('❌ Erro na conexão com Supabase:', error);
         return false;
@@ -79,5 +89,5 @@ async function testarConexao() {
 
 // Função para obter cliente Supabase
 function getSupabaseClient() {
-    return supabase;
+    return window.supabaseClient || null;
 }
