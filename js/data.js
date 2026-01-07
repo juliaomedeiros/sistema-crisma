@@ -20,6 +20,10 @@ async function carregarDados() {
   try {
     console.log("🔄 Carregando dados do Supabase...");
 
+     const supabase = getSupabaseClient() || window.supabase; 
+    
+      if (!supabase) throw new Error("Cliente Supabase não inicializado");
+
     // Carregar crismandos
     const { data: crismandosData, error: crismandosError } = await supabase
       .from("crismandos")
@@ -534,6 +538,7 @@ async function removerCrismando(id) {
   }
 
   try {
+    const supabase = getSupabaseClient();
     const { error } = await supabase.from("crismandos").delete().eq("id", id);
 
     if (error) throw error;
@@ -620,20 +625,20 @@ function testarBibliotecaXLSX() {
   }
 }
 
-// Melhorar a associação de pagamentos
-pagamentosParaSalvar.forEach((item) => {
-  const crismandoEncontrado = crismandosSalvos.find(
-    (c) =>
-      c.nome.toLowerCase().trim() === item.nomeCrismando.toLowerCase().trim()
-  );
-  if (crismandoEncontrado) {
-    pagamentosComId.push({
-      crismando_id: crismandoEncontrado.id,
-      mes: item.pagamento.mes,
-      valor: item.pagamento.valor,
-    });
-  }
-});
+// // excluido para ver nos testes se faz sentido
+// pagamentosParaSalvar.forEach((item) => {
+//   const crismandoEncontrado = crismandosSalvos.find(
+//     (c) =>
+//       c.nome.toLowerCase().trim() === item.nomeCrismando.toLowerCase().trim()
+//   );
+//   if (crismandoEncontrado) {
+//     pagamentosComId.push({
+//       crismando_id: crismandoEncontrado.id,
+//       mes: item.pagamento.mes,
+//       valor: item.pagamento.valor,
+//     });
+//   }
+// });
 
 // Função para sincronizar dados
 async function sincronizarDados() {

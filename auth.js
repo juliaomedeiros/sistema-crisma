@@ -7,7 +7,7 @@ class AuthSystem {
         this.sessionTimer = null;
         this.maxTentativas = 3;
     }
-    
+
     // Função para hash de senha (SHA-256)
     async hashSenha(senha) {
         const senhaLimpa = senha.trim();
@@ -17,7 +17,7 @@ class AuthSystem {
         const hashArray = Array.from(new Uint8Array(hashBuffer));
         return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
     }
-    
+
     // CORREÇÃO: Inicializar Supabase antes do login
     async initializeSupabaseForAuth() {
         try {
@@ -25,45 +25,47 @@ class AuthSystem {
             if (typeof ENV === 'undefined') {
                 throw new Error('Variáveis de ambiente não carregadas');
             }
-            
-            // Verificar se biblioteca Supabase está carregada
+
+            // Verificar se a biblioteca Supabase está carregada
             if (typeof window.supabase === 'undefined') {
                 throw new Error('Biblioteca Supabase não carregada');
             }
-            
-            // Criar cliente se não existir
-            if (!window.supabase_client) {
-                window.supabase_client = window.supabase.createClient(
-                    ENV.SUPABASE_URL, 
+
+            // Usar o cliente global se existir, senão criar
+            if (!window.supabaseClient) {
+                window.supabaseClient = window.supabase.createClient(
+                    ENV.SUPABASE_URL,
                     ENV.SUPABASE_ANON_KEY
                 );
+                console.log('✅ Cliente Supabase criado para autenticação');
             }
-            
-            return window.supabase_client;
+
+            return window.supabaseClient;
+
         } catch (error) {
-            console.error('Erro ao inicializar Supabase para auth:', error);
+            console.error('❌ Erro ao inicializar Supabase:', error);
             throw error;
         }
     }
-    
+
     // Função de login corrigida
     async login(usuario, senha) {
         try {
             console.log('🔄 Iniciando processo de login...');
-            
+
             // CORREÇÃO: Inicializar Supabase primeiro
             const supabaseClient = await this.initializeSupabaseForAuth();
-            
+
             if (!supabaseClient) {
                 throw new Error('Falha na inicialização do banco de dados');
             }
-            
+
             console.log('✅ Cliente Supabase inicializado para login');
-            
+
             // Hash da senha
             const senhaHash = await this.hashSenha(senha);
             console.log('🔐 Senha processada');
-            
+
             // Verificar credenciais no banco
             const { data, error } = await supabaseClient
                 .from('usuarios_autenticados')
@@ -71,39 +73,39 @@ class AuthSystem {
                 .eq('usuario', usuario)
                 .eq('ativo', true)
                 .single();
-            
+
             if (error || !data) {
                 console.error('Erro na consulta:', error);
                 throw new Error('Usuário não encontrado ou inativo');
             }
-            
+
             console.log('✅ Usuário encontrado no banco');
-            
+
             // Verificar se está bloqueado
             if (data.bloqueado_ate && new Date(data.bloqueado_ate) > new Date()) {
                 const tempoRestante = Math.ceil((new Date(data.bloqueado_ate) - new Date()) / 60000);
                 throw new Error(`Usuário bloqueado. Tente novamente em ${tempoRestante} minutos.`);
             }
-            
+
             // Verificar senha
             if (data.senha !== senhaHash) {
                 // Incrementar tentativas
                 const novasTentativas = (data.tentativas_login || 0) + 1;
                 const updateData = { tentativas_login: novasTentativas };
-                
+
                 // Bloquear após 3 tentativas
                 if (novasTentativas >= this.maxTentativas) {
                     updateData.bloqueado_ate = new Date(Date.now() + 15 * 60 * 1000).toISOString();
                 }
-                
+
                 await supabaseClient
                     .from('usuarios_autenticados')
                     .update(updateData)
                     .eq('id', data.id);
-                
+
                 throw new Error(`Senha incorreta. Tentativas restantes: ${this.maxTentativas - novasTentativas}`);
             }
-            
+
             // Login bem-sucedido - resetar tentativas e atualizar último login
             await supabaseClient
                 .from('usuarios_autenticados')
@@ -113,7 +115,7 @@ class AuthSystem {
                     last_login: new Date().toISOString()
                 })
                 .eq('id', data.id);
-            
+
             // Configurar sessão
             this.isAuthenticated = true;
             this.currentUser = {
@@ -122,64 +124,64 @@ class AuthSystem {
                 nome: data.nome,
                 email: data.email
             };
-            
+
             // Salvar sessão no localStorage
             const sessionData = {
                 user: this.currentUser,
                 loginTime: Date.now(),
                 expiresAt: Date.now() + this.sessionTimeout
             };
-            
+
             localStorage.setItem('crisma_session', JSON.stringify(sessionData));
             this.startSessionTimer();
-            
+
             console.log('✅ Login realizado com sucesso');
             return { success: true, user: this.currentUser };
-            
+
         } catch (error) {
             console.error('❌ Erro no login:', error);
             return { success: false, error: error.message };
         }
     }
-    
+
     // Verificar sessão existente
     checkSession() {
         const sessionData = localStorage.getItem('crisma_session');
         if (!sessionData) return false;
-        
+
         try {
             const session = JSON.parse(sessionData);
-            
+
             // Verificar se não expirou
             if (Date.now() > session.expiresAt) {
                 this.logout();
                 return false;
             }
-            
+
             // Restaurar sessão
             this.isAuthenticated = true;
             this.currentUser = session.user;
             this.startSessionTimer();
-            
+
             return true;
-            
+
         } catch (error) {
             this.logout();
             return false;
         }
     }
-    
+
     // Logout
     logout() {
         this.isAuthenticated = false;
         this.currentUser = null;
         localStorage.removeItem('crisma_session');
         this.clearSessionTimer();
-        
+
         // Redirecionar para login
         this.showLoginPage();
     }
-    
+
     // Gerenciar timer de sessão
     startSessionTimer() {
         this.clearSessionTimer();
@@ -188,14 +190,14 @@ class AuthSystem {
             this.logout();
         }, this.sessionTimeout);
     }
-    
+
     clearSessionTimer() {
         if (this.sessionTimer) {
             clearTimeout(this.sessionTimer);
             this.sessionTimer = null;
         }
     }
-    
+
     // Verificar se usuário está autenticado
     requireAuth() {
         if (!this.isAuthenticated) {
@@ -205,13 +207,13 @@ class AuthSystem {
         }
         return true;
     }
-    
+
     // Mostrar página de login
     showLoginPage() {
         document.body.innerHTML = this.getLoginHTML();
         this.setupLoginEvents();
     }
-    
+
     // HTML da página de login (mantém o mesmo do arquivo original)
     getLoginHTML() {
         return `
@@ -445,34 +447,34 @@ class AuthSystem {
         </html>
         `;
     }
-    
+
     // Configurar eventos do login
     setupLoginEvents() {
         const loginForm = document.getElementById('loginForm');
         const errorMessage = document.getElementById('errorMessage');
         const loginBtn = document.getElementById('loginBtn');
         const loading = document.getElementById('loading');
-        
+
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            
+
             const usuario = document.getElementById('usuario').value.trim();
             const senha = document.getElementById('senha').value;
-            
+
             if (!usuario || !senha) {
                 this.showError('Por favor, preencha todos os campos.');
                 return;
             }
-            
+
             // Mostrar loading
             loginBtn.disabled = true;
             loginBtn.textContent = 'Verificando...';
             loading.style.display = 'block';
             errorMessage.style.display = 'none';
-            
+
             try {
                 const result = await this.login(usuario, senha);
-                
+
                 if (result.success) {
                     loginBtn.textContent = '✅ Sucesso! Redirecionando...';
                     setTimeout(() => {
@@ -490,17 +492,17 @@ class AuthSystem {
                 loading.style.display = 'none';
             }
         });
-        
+
         // Focar no campo usuário
         document.getElementById('usuario').focus();
     }
-    
+
     // Mostrar erro
     showError(message) {
         const errorMessage = document.getElementById('errorMessage');
         errorMessage.textContent = message;
         errorMessage.style.display = 'block';
-        
+
         // Animar erro
         errorMessage.style.animation = 'none';
         setTimeout(() => {

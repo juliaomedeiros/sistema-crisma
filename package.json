@@ -1,4 +1,22 @@
 {
+  "name": "sistema-crisma",
+  "version": "1.0.0",
+  "description": "Sistema web para gerenciamento de pagamentos da Crisma.",
+  "homepage": "https://github.com/juliaomedeiros/sistema-crisma#readme",
+  "bugs": {
+    "url": "https://github.com/juliaomedeiros/sistema-crisma/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/juliaomedeiros/sistema-crisma.git"
+  },
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "main": "auth.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
   "dependencies": {
     "javascript-obfuscator": "^4.1.1",
     "terser-webpack-plugin": "^5.3.14"
