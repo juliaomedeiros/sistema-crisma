@@ -106,6 +106,12 @@ async function adicionarCrismando() {
   }
 
   try {
+
+    const supabase = getSupabaseClient() || window.supabase;
+    if (!supabase) {
+      throw new Error("Cliente Supabase não inicializado");
+    }
+
     const { data, error } = await supabase
       .from("crismandos")
       .insert([
@@ -155,6 +161,11 @@ async function registrarPagamento() {
   const nomeMes = nomeMesPorNumero(mesNumero);
 
   try {
+    const supabase = getSupabaseClient() || window.supabase;
+    if (!supabase) {
+      throw new Error("Cliente Supabase não inicializado");
+    }
+
     // Verificar se crismando existe
     const { data: crismandoExiste, error: errorVerificacao } = await supabase
       .from("crismandos")
@@ -576,6 +587,11 @@ function gerarCodigoUnico() {
 // Registrar código de autenticação
 async function registrarCodigoAutenticacao(dadosComprovante, codigo) {
   try {
+    const supabase = getSupabaseClient() || window.supabase;
+    if (!supabase) {
+      throw new Error("Cliente Supabase não inicializado");
+    }
+
     const registro = {
       codigo: codigo,
       crismando_id: dadosComprovante.crismando.id,
