@@ -28,13 +28,15 @@
                     <div class="stat-number" id="totalCrismandos">0</div>
                     <div>Total de Crismandos</div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-number" id="pagamentosHoje">0</div>
-                    <div>Pagamentos Hoje</div>
-                </div>
+
                 <div class="stat-card">
                     <div class="stat-number" id="totalArrecadado">R$ 0,00</div>
                     <div>Total Arrecadado</div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-number" id="pagamentosHoje">0</div>
+                    <div>Despesas</div>
                 </div>
             </div>
 
@@ -54,9 +56,12 @@
                 <div class="form-grid">
                     <div class="form-group">
                         <label for="selectCrismando">Crismando:</label>
-                        <select id="selectCrismando">
-                            <option value="">Selecione um crismando</option>
-                        </select>
+                        <div style="position: relative;">
+                            <input type="text" id="campoBuscaCrismando" placeholder="Digite o nome do crismando..."
+                                autocomplete="off" style="width: 100%; padding: 8px; box-sizing: border-box;" />
+                            <input type="hidden" id="crismandoIdSelecionado" />
+                            <div id="listaAutocompleteCrismando" style="display:none;"></div>
+                        </div>
                     </div>
                     <div class="form-group">
                         <!-- Campo selecionar mês -->
@@ -80,9 +85,10 @@
                         <label for="anoPagamento">Ano do Pagamento:</label>
                         <select id="anoPagamento" required>
                             <!-- Pode ajustar os anos conforme necessário -->
-                            <option value="2025" selected>2025</option>
-                            <option value="2026">2026</option>
+                            <option value="2026" selected>2026</option>
                             <option value="2027">2027</option>
+                            <option value="2028">2028</option>
+                            <option value="2029">2029</option>
                         </select>
                     </div>
                     <div class="form-group">
@@ -99,8 +105,8 @@
 
             <div class="section">
                 <h3>🔎 Pesquisar Crismando</h3>
-                <input type="text" id="inputPesquisarCrismando" placeholder="Digite o nome do crismando"
-                    style="width: 100%; padding: 10px; font-size: 16px; border-radius: 8px; border: 2px solid #ddd;">
+                <input type="text" id="nomePesquisa" placeholder="Digite o nome do crismando..."
+                    oninput="exibirResultadoPesquisa()" />
                 <div id="resultadoPesquisa" style="margin-top: 20px;"></div>
             </div>
 
@@ -109,12 +115,25 @@
                 <h3>📈 Relatório por Mês</h3>
 
                 <div class="button-group">
-                    <button class="btn btn-info" onclick="gerarRelatorio()">📊 Ver Relatório</button>
-                    <button class="btn btn-success" onclick="baixarRelatorioExcel()">📥 Baixar Excel</button>
-                    <button class="btn btn-primary" onclick="baixarRelatorioCompleto()">📋 Relatório Completo</button>
+                    <button class="btn btn-info" onclick="popularSelectRelatorio(); gerarRelatorio();">📊 Ver
+                        Relatório</button>
+                    <button class="btn btn-success" onclick="baixarExcel()">📥 Baixar Excel</button>
+                    <button class="btn btn-primary" onclick="verRelatorioCompleto()">📋 Relatório Completo</button>
                 </div>
+
+                <!-- ✅ Select dinâmico — populado pelo JS via popularSelectRelatorio() -->
+                <div style="margin: 15px 0;">
+                    <label style="font-weight: bold; display: block; margin-bottom: 6px;">Escolha o mês:</label>
+                    <select id="selectMesRelatorio" onchange="gerarRelatorio()" style="width: 100%; max-width: 300px; padding: 8px 12px;
+                       border: 2px solid #e74c3c; border-radius: 6px; font-size: 14px;">
+                        <option value="">-- Selecione o mês --</option>
+                    </select>
+                </div>
+
+                <div id="relatorioGerado"></div>
                 <div id="resultadoRelatorio"></div>
             </div>
+
             <!-- Seção de Validação de Telefones -->
             <div class="section">
                 <h3>📱 Validação de Telefones</h3>
