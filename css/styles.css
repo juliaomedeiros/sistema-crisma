@@ -296,3 +296,174 @@ tr:hover {
   font-size: 14px;
 }
 
+/* Estilos para Seleção Multi-mês e Multi-ano */
+.meses-container {
+    background: #ffffff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 15px;
+    margin-top: 10px;
+}
+
+.meses-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.mes-checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #f8f9fa;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    padding: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    user-select: none;
+    transition: all 0.2s ease;
+}
+
+.mes-checkbox-label:hover {
+    background: #e9ecef;
+    border-color: #adb5bd;
+}
+
+.mes-checkbox-label.checked {
+    background: #e3f2fd;
+    border-color: #3498db;
+    color: #1976d2;
+    font-weight: bold;
+}
+
+.mes-checkbox-label.pago {
+    background: #e8f5e9;
+    border-color: #a5d6a7;
+    color: #2e7d32;
+    opacity: 0.8;
+    cursor: not-allowed;
+}
+
+.mes-checkbox-label input[type="checkbox"] {
+    width: auto;
+    cursor: pointer;
+}
+
+.badge-pago {
+    font-size: 10px;
+    background: #2e7d32;
+    color: white;
+    padding: 2px 5px;
+    border-radius: 4px;
+    margin-left: auto;
+}
+
+.ano-seletor-container {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+}
+
+.grid-anual-matriz {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.card-mes-anual {
+    border-radius: 8px;
+    padding: 10px;
+    text-align: center;
+    font-size: 12px;
+    border: 1px solid #ddd;
+    background: #ffffff;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.card-mes-anual.pago {
+    background: #e8f5e9;
+    border-color: #81c784;
+    color: #1b5e20;
+}
+
+.card-mes-anual.pendente {
+    background: #ffebee;
+    border-color: #ef9a9a;
+    color: #b71c1c;
+}
+
+/* ====================================================================
+   SISTEMA DE ABAS (TAB NAVIGATION) - MOBILE & TABLET FIRST
+   ==================================================================== */
+.tab-navigation {
+    display: flex;
+    justify-content: space-around;
+    background: #ffffff;
+    border-bottom: 2px solid #e2e8f0;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    margin-bottom: 20px;
+    border-radius: 8px;
+    overflow-x: auto;
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.tab-btn {
+    flex: 1;
+    padding: 14px 16px;
+    border: none;
+    background: transparent;
+    font-size: 14px;
+    font-weight: 600;
+    color: #64748b;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-bottom: 3px solid transparent;
+}
+
+.tab-btn:hover {
+    color: #1e3a8a;
+    background: #f8fafc;
+}
+
+.tab-btn.active {
+    color: #1e3a8a;
+    border-bottom-color: #1e3a8a;
+    background: #eff6ff;
+}
+
+.tab-pane {
+    display: none;
+    animation: fadeIn 0.3s ease;
+}
+
+.tab-pane.active-pane {
+    display: block;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 768px) {
+    .tab-btn {
+        padding: 10px 12px;
+        font-size: 12px;
+        flex-direction: column;
+        gap: 4px;
+    }
+}
+

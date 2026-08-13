@@ -488,41 +488,54 @@ function exibirResultadoPesquisa() {
 
   let html = "";
   resultados.forEach((res) => {
-    const mesesPagosStr = res.mesesPagos.length > 0
-      ? res.mesesPagos.join(", ")
-      : "Nenhum pagamento registrado";
+    const c = res.crismando;
+    const pgs = res.pagamentos;
 
-    let pagamentosDetalhesHTML = "";
-    res.pagamentos.forEach((p) => {
-      const { mes, ano } = extrairMesAno(p);
-      pagamentosDetalhesHTML += `
-        <tr>
-          <td>${mes}/${ano}</td>
-          <td>R$ ${parseFloat(p.valor || 0).toFixed(2).replace(".", ",")}</td>
-          <td>${p.data_pagamento || "-"}</td>
-        </tr>`;
+    // Descobrir quais anos possuem pagamentos ou exibir ano vigente 2026
+    const anosDefinidos = Array.from(new Set(pgs.map(p => extrairMesAno(p).ano).filter(Boolean)));
+    if (!anosDefinidos.includes(2026)) anosDefinidos.push(2026);
+    anosDefinidos.sort((a, b) => a - b);
+
+    let matrizAnualHTML = "";
+    anosDefinidos.forEach((ano) => {
+      matrizAnualHTML += `<div style="margin-top: 15px;">`;
+      matrizAnualHTML += `<strong style="color: #2c3e50; font-size: 14px;">📅 Status das Contribuições em ${ano}:</strong>`;
+      matrizAnualHTML += `<div class="grid-anual-matriz">`;
+
+      ORDEM_MESES.forEach((mesNome) => {
+        const pgEncontrado = pgs.find((p) => {
+          const { mes, ano: a } = extrairMesAno(p);
+          return mes === mesNome && parseInt(a) === ano;
+        });
+
+        if (pgEncontrado) {
+          const valFormatted = parseFloat(pgEncontrado.valor || 0).toFixed(2).replace(".", ",");
+          const dtFormatted = pgEncontrado.data_pagamento || "-";
+          matrizAnualHTML += `
+            <div class="card-mes-anual pago">
+              <strong>✅ ${mesNome}</strong><br>
+              <small>R$ ${valFormatted}</small><br>
+              <small style="opacity: 0.8;">${dtFormatted}</small>
+            </div>`;
+        } else {
+          matrizAnualHTML += `
+            <div class="card-mes-anual pendente">
+              <strong>❌ ${mesNome}</strong><br>
+              <small>Pendente</small>
+            </div>`;
+        }
+      });
+
+      matrizAnualHTML += `</div></div>`;
     });
 
     html += ` 
-      <div style="border:1px solid #ddd;padding:10px;margin:10px 0;border-radius:8px;background:#f9f9f9;">
-        <h4 style="margin-top:0;color:#2c3e50;">👤 ${res.crismando.nome}</h4>
-        <p><strong>📞 Telefone:</strong> ${res.crismando.telefone || "-"}</p>
-        <p><strong>💰 Valor Mensal:</strong> R$ ${(res.crismando.valor_mensal || 0).toFixed(2).replace(".", ",")}</p>
-        <p><strong>✅ Meses Pagos:</strong> ${mesesPagosStr}</p>
-        ${res.pagamentos.length > 0 ? `
-          <table border="1" cellpadding="5" style="width:100%;border-collapse:collapse;margin-top:10px;font-size:12px;">
-            <thead style="background:#34495e;color:white;">
-              <tr>
-                <th>Mês/Ano</th>
-                <th>Valor</th>
-                <th>Data Pagamento</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${pagamentosDetalhesHTML}
-            </tbody>
-          </table>
-        ` : ""}
+      <div style="border:1px solid #ddd;padding:15px;margin:15px 0;border-radius:10px;background:#ffffff;box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+        <h4 style="margin-top:0;color:#2c3e50;font-size: 1.1em;">👤 ${c.nome}</h4>
+        <p><strong>📞 Telefone:</strong> ${c.telefone || "-"}</p>
+        <p><strong>💰 Valor Mensal de Contribuição:</strong> R$ ${(c.valor_mensal || 0).toFixed(2).replace(".", ",")}</p>
+        
+        ${matrizAnualHTML}
       </div>`;
   });
 

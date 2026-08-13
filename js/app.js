@@ -27,12 +27,24 @@ document.addEventListener('DOMContentLoaded', async function() {
     const conexaoOk = await testarConexao();
     if (conexaoOk) {
       await carregarDados();
-      // ✅ carregarCodigosAutenticacao() removida — já está dentro de carregarDados()
+      if (typeof carregarDadosFinanceiros === 'function') {
+        await carregarDadosFinanceiros();
+      }
+      if (typeof carregarDadosFrequencia === 'function') {
+        await carregarDadosFrequencia();
+      }
       atualizarEstatisticas();
       atualizarTabela();
       atualizarSelectCrismandos();
       inicializarAutocompleteCrismando(); // ✅ autocomplete do campo de pagamento
-       popularSelectRelatorio();
+      popularSelectRelatorio();
+      if (typeof atualizarIndicadorInadimplencia === 'function') {
+        atualizarIndicadorInadimplencia();
+      }
+      if (typeof inicializarMóduloExcel === 'function') {
+        inicializarMóduloExcel();
+      }
+      restaurarAbaSalva();
       adicionarBotaoLogout();
       adicionarInfoUsuario();
       console.log('✅ Sistema inicializado com sucesso!');
@@ -100,4 +112,78 @@ function adicionarInfoUsuario() {
     <small>Último acesso: ${new Date().toLocaleString('pt-BR')}</small>
   `;
   mainContent.insertBefore(userBanner, mainContent.firstChild);
+}
+
+function alternarAba(tabId) {
+  document.querySelectorAll(".tab-pane").forEach(pane => pane.classList.remove("active-pane"));
+  document.querySelectorAll(".tab-btn").forEach(btn => btn.classList.remove("active"));
+
+  const paneAlvo = document.getElementById(tabId);
+  if (paneAlvo) paneAlvo.classList.add("active-pane");
+
+  const mapaBotoes = {
+    tabInicio: "btnTabInicio",
+    tabCrismandos: "btnTabCrismandos",
+    tabFrequencia: "btnTabFrequencia",
+    tabFinanceiro: "btnTabFinanceiro",
+    tabEvolution: "btnTabEvolution"
+  };
+
+  const btnId = mapaBotoes[tabId];
+  if (btnId) {
+    const btnAlvo = document.getElementById(btnId);
+    if (btnAlvo) btnAlvo.classList.add("active");
+  }
+
+  sessionStorage.setItem("abaAtivaCrisma", tabId);
+
+  if (tabId === "tabCrismandos") {
+    renderizarTabelaGeralCrismandos();
+  }
+}
+
+function restaurarAbaSalva() {
+  const abaSalva = sessionStorage.getItem("abaAtivaCrisma") || "tabInicio";
+  alternarAba(abaSalva);
+}
+
+function renderizarTabelaGeralCrismandos(filtro = "") {
+  const tbody = document.getElementById("corpoTabelaGeralCrismandos");
+  if (!tbody) return;
+
+  tbody.innerHTML = "";
+
+  if (!crismandos || crismandos.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:#888;">Nenhum crismando cadastrado. Use a importação Excel ou o formulário acima.</td></tr>`;
+    return;
+  }
+
+  const filtroNorm = filtro.trim().toLowerCase();
+  const crismandosFiltrados = crismandos.filter(c => {
+    return c.nome.toLowerCase().includes(filtroNorm) || (c.telefone && c.telefone.includes(filtroNorm));
+  });
+
+  if (crismandosFiltrados.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:#888;">Nenhum crismando encontrado para "${filtro}".</td></tr>`;
+    return;
+  }
+
+  crismandosFiltrados.forEach(c => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><strong>${c.nome}</strong></td>
+      <td>${c.telefone || "-"}</td>
+      <td style="color:#27ae60; font-weight:bold;">R$ ${parseFloat(c.valor_mensal || 10).toFixed(2).replace(".", ",")}</td>
+      <td>
+        <button class="btn btn-warning" style="padding: 4px 8px; font-size: 11px;" onclick="deletarCrismando(${c.id})">🗑️ Excluir</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function filtrarTabelaGeralCrismandos() {
+  const input = document.getElementById("buscaTabelaCrismandos");
+  const termo = input ? input.value : "";
+  renderizarTabelaGeralCrismandos(termo);
 }
