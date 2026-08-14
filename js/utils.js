@@ -6,20 +6,21 @@ const ORDEM_MESES = [
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
 ];
 
-// ✅ Extrai mes e ano corretos a partir de data_pagamento
-// Se data_pagamento existir, usa ela. Senão, usa mes/ano do registro.
+// ✅ Extrai mes e ano referentes à contribuição mensal (p.mes e p.ano)
 function extrairMesAno(p) {
-  if (p.data_pagamento) {
-    const d = new Date(p.data_pagamento + "T12:00:00"); // evita fuso horário
-    const mesNome = ORDEM_MESES[d.getMonth()];
-    const ano = d.getFullYear();
-    return { mes: mesNome, ano };
+  if (!p) return { mes: null, ano: null };
+
+  let mes = p.mes ? p.mes.trim() : null;
+  if (mes) {
+    mes = mes.charAt(0).toUpperCase() + mes.slice(1).toLowerCase();
+  } else if (p.data_pagamento) {
+    const d = new Date(p.data_pagamento + "T12:00:00");
+    mes = ORDEM_MESES[d.getMonth()];
   }
-  // fallback: usa os campos mes/ano do banco normalizando capitalização
-  const mes = p.mes
-    ? p.mes.charAt(0).toUpperCase() + p.mes.slice(1).toLowerCase()
-    : null;
-  return { mes, ano: parseInt(p.ano) };
+
+  let ano = p.ano ? parseInt(p.ano) : (p.data_pagamento ? new Date(p.data_pagamento + "T12:00:00").getFullYear() : new Date().getFullYear());
+
+  return { mes, ano };
 }
 
 
@@ -443,31 +444,14 @@ function pesquisarCrismandoPorNome(nome) {
     .filter((c) => c.nome.toLowerCase().includes(nomeLower))
     .map((c) => {
       const pagamentosCrismando = pagamentos.filter(
-        (p) => p.crismando_id === c.id
+        (p) => String(p.crismando_id) === String(c.id)
       );
       const mesesPagos = pagamentosCrismando.map((p) => {
-        const { mes, ano } = extrairMesAno(p);  // ← normaliza aqui
+        const { mes, ano } = extrairMesAno(p);
         return `${mes}/${ano || ""}`;
       });
       return { crismando: c, pagamentos: pagamentosCrismando, mesesPagos };
     });
-}
-
-
-function pesquisarCrismandoPorNome(nome) { 
-  const nomeLower = nome.toLowerCase().trim(); 
-  return crismandos 
-    .filter((c) => c.nome.toLowerCase().includes(nomeLower)) 
-    .map((c) => { 
-      const pagamentosCrismando = pagamentos.filter( 
-        (p) => p.crismando_id === c.id 
-      ); 
-      const mesesPagos = pagamentosCrismando.map((p) => { 
-        const { mes, ano } = extrairMesAno(p); 
-        return `${mes}/${ano || ""}`; 
-      }); 
-      return { crismando: c, pagamentos: pagamentosCrismando, mesesPagos }; 
-    }); 
 }
 
 function exibirResultadoPesquisa() {
@@ -486,14 +470,16 @@ function exibirResultadoPesquisa() {
     return;
   }
 
+  const anoInicioCiclo = parseInt(window.configuracoesSistema?.ano_inicio_ciclo || 2026);
+
   let html = "";
   resultados.forEach((res) => {
     const c = res.crismando;
     const pgs = res.pagamentos;
 
-    // Descobrir quais anos possuem pagamentos ou exibir ano vigente 2026
+    // Descobrir todos os anos que possuem pagamentos registrados no banco para este crismando
     const anosDefinidos = Array.from(new Set(pgs.map(p => extrairMesAno(p).ano).filter(Boolean)));
-    if (!anosDefinidos.includes(2026)) anosDefinidos.push(2026);
+    if (!anosDefinidos.includes(anoInicioCiclo)) anosDefinidos.push(anoInicioCiclo);
     anosDefinidos.sort((a, b) => a - b);
 
     let matrizAnualHTML = "";
@@ -533,7 +519,7 @@ function exibirResultadoPesquisa() {
       <div style="border:1px solid #ddd;padding:15px;margin:15px 0;border-radius:10px;background:#ffffff;box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
         <h4 style="margin-top:0;color:#2c3e50;font-size: 1.1em;">👤 ${c.nome}</h4>
         <p><strong>📞 Telefone:</strong> ${c.telefone || "-"}</p>
-        <p><strong>💰 Valor Mensal de Contribuição:</strong> R$ ${(c.valor_mensal || 0).toFixed(2).replace(".", ",")}</p>
+        <p><strong>💰 Valor Mensal de Contribuição:</strong> R$ ${(c.valor_mensal || window.configuracoesSistema?.valor_mensal_padrao || 10).toFixed(2).replace(".", ",")}</p>
         
         ${matrizAnualHTML}
       </div>`;

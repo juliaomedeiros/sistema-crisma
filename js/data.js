@@ -1,8 +1,18 @@
-// Dados globais
+// js/data.js - Manipulação de Estado, Crismandos, Pagamentos Multi-Mês e Ciclo Catequético
+
 let crismandos = [];
 let pagamentos = [];
 let logoBase64 = "";
 let codigosAutenticacao = [];
+let recibosPendentesEncontro = [];
+
+// Configuração padrão do Ciclo Catequético e Mensalidade
+window.configuracoesSistema = {
+  mes_inicio_ciclo: 9, // 9 = Setembro (padrão: Set/2026 a Ago/2027)
+  ano_inicio_ciclo: 2026,
+  valor_mensal_padrao: 10.00,
+  nome_turma: "Crisma de Adultos 2026/2027"
+};
 
 const versiculos = [
   "A fé é o fundamento da esperança, é uma certeza a respeito do que não se vê. - Hebreus 11:1",
@@ -15,9 +25,124 @@ const versiculos = [
   "O justo viverá pela fé. - Romanos 1:17",
 ];
 
+// Carrega configurações do sistema do Supabase ou localStorage
+async function carregarConfiguracoesSistema() {
+  try {
+    const supabaseClient = getSupabaseClient() || window.supabaseClient;
+    if (supabaseClient) {
+      const { data, error } = await supabaseClient
+        .from("configuracoes_sistema")
+        .select("*")
+        .eq("chave", "config_turma_ciclo")
+        .maybeSingle();
+      if (!error && data && data.valor) {
+        window.configuracoesSistema = Object.assign({}, window.configuracoesSistema, data.valor);
+      }
+    }
+  } catch (e) {
+    console.warn("⚠️ Usando configurações armazenadas localmente para a turma.");
+  }
+
+  const localSalvo = localStorage.getItem("crisma_config_turma_ciclo");
+  if (localSalvo) {
+    try {
+      window.configuracoesSistema = Object.assign({}, window.configuracoesSistema, JSON.parse(localSalvo));
+    } catch (e) {}
+  }
+
+  // Preencher campos do painel de configurações se existirem na tela
+  preencherPainelConfiguracoes();
+}
+
+async function salvarConfiguracoesSistema(novosDados) {
+  window.configuracoesSistema = Object.assign({}, window.configuracoesSistema, novosDados);
+  localStorage.setItem("crisma_config_turma_ciclo", JSON.stringify(window.configuracoesSistema));
+
+  try {
+    const supabase = getSupabaseClient() || window.supabase;
+    if (supabase) {
+      await supabase.from("configuracoes_sistema").upsert({
+        chave: "config_turma_ciclo",
+        valor: window.configuracoesSistema,
+        updated_at: new Date().toISOString()
+      });
+    }
+  } catch (e) {
+    console.warn("⚠️ Configurações salvas localmente:", e);
+  }
+
+  alert("✅ Configurações da Turma e do Ciclo Catequético salvas com sucesso!");
+  atualizarGradeMeses();
+  atualizarEstatisticas();
+}
+
+function salvarConfiguracoesFormulario() {
+  const mesInicio = parseInt(document.getElementById("cfgMesInicioCiclo")?.value || 9);
+  const anoInicio = parseInt(document.getElementById("cfgAnoInicioCiclo")?.value || 2026);
+  const valPadrao = parseFloat(document.getElementById("cfgValorMensalPadrao")?.value || 10.00) || 10.00;
+  const nomeTurma = document.getElementById("cfgNomeTurma")?.value.trim() || "Crisma de Adultos";
+
+  salvarConfiguracoesSistema({
+    mes_inicio_ciclo: mesInicio,
+    ano_inicio_ciclo: anoInicio,
+    valor_mensal_padrao: valPadrao,
+    nome_turma: nomeTurma
+  });
+}
+
+function preencherPainelConfiguracoes() {
+  const cfg = window.configuracoesSistema;
+  const selMes = document.getElementById("cfgMesInicioCiclo");
+  const selAno = document.getElementById("cfgAnoInicioCiclo");
+  const inpVal = document.getElementById("cfgValorMensalPadrao");
+  const inpNom = document.getElementById("cfgNomeTurma");
+
+  if (selMes) selMes.value = cfg.mes_inicio_ciclo;
+  if (selAno) selAno.value = cfg.ano_inicio_ciclo;
+  if (inpVal) inpVal.value = (cfg.valor_mensal_padrao || 10.00).toFixed(2);
+  if (inpNom) inpNom.value = cfg.nome_turma || "Crisma de Adultos";
+
+  const valForm = document.getElementById("valorUnitario");
+  if (valForm && (!valForm.value || valForm.value === "10.00")) {
+    valForm.value = (cfg.valor_mensal_padrao || 10.00).toFixed(2);
+  }
+}
+
+// Gera a sequência dos 12 meses na ordem cronológica exata do ciclo catequético ativo
+function gerarMesesCicloAtivo() {
+  const mesInicio = parseInt(window.configuracoesSistema.mes_inicio_ciclo || 9);
+  const anoInicio = parseInt(window.configuracoesSistema.ano_inicio_ciclo || 2026);
+
+  const meses = [];
+  let m = mesInicio - 1; // 0-indexed
+  let a = anoInicio;
+
+  for (let i = 0; i < 12; i++) {
+    const nomeMes = ORDEM_MESES[m];
+    const mesNumStr = String(m + 1).padStart(2, "0");
+    meses.push({
+      indiceMes: m,
+      mesNome: nomeMes,
+      mesNum: mesNumStr,
+      ano: a,
+      rotuloCurto: `${nomeMes.substring(0, 3)}/${String(a).substring(2)}`
+    });
+
+    m++;
+    if (m > 11) {
+      m = 0;
+      a++;
+    }
+  }
+
+  return meses;
+}
+
 async function carregarDados() {
   try {
     console.log("🔄 Carregando dados do Supabase...");
+    await carregarConfiguracoesSistema();
+
     const supabase = getSupabaseClient() || window.supabase;
     if (!supabase) throw new Error("Cliente Supabase não inicializado");
 
@@ -28,7 +153,6 @@ async function carregarDados() {
     if (crismandosError) throw crismandosError;
     crismandos = crismandosData || [];
 
-    // ✅ .range() garante busca de todos os registros sem limite do Supabase (padrão 1000)
     let pagamentosData = [];
     let pagamentosError = null;
     let from = 0;
@@ -45,7 +169,7 @@ async function carregarDados() {
       if (!batch || batch.length === 0) break;
 
       pagamentosData = pagamentosData.concat(batch);
-      if (batch.length < pageSize) break; // última página
+      if (batch.length < pageSize) break;
       from += pageSize;
     }
 
@@ -70,6 +194,7 @@ async function carregarDados() {
       }
     }
 
+    carregarRecibosPendentesLocal();
     console.log("✅ Todos os dados carregados com sucesso!");
   } catch (error) {
     console.error("❌ Erro crítico ao carregar dados:", error);
@@ -77,18 +202,18 @@ async function carregarDados() {
     crismandos = crismandos || [];
     pagamentos = pagamentos || [];
     codigosAutenticacao = codigosAutenticacao || [];
+    carregarRecibosPendentesLocal();
   }
 }
 
 async function adicionarCrismando() {
   const nome = document.getElementById("novoNome").value.trim();
   const telefone = document.getElementById("novoTelefone").value.trim();
-  const valor = parseFloat(document.getElementById("novoValor").value) || 0;
+  const valor = parseFloat(document.getElementById("novoValor").value) || window.configuracoesSistema.valor_mensal_padrao || 10.00;
 
   if (!nome) { alert("Por favor, informe o nome do crismando."); return; }
 
   try {
-
     const supabase = getSupabaseClient() || window.supabase; 
     if (!supabase) throw new Error("Cliente Supabase não inicializado");
 
@@ -113,83 +238,93 @@ async function adicionarCrismando() {
   }
 }
 
-// ─────────────────────────────────────────────
-// GRADE DE MESES E REGISTRO MULTI-MÊS / MULTI-ANO
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// GRADE TOUCH-FRIENDLY DE MESES DO CICLO CATEQUÉTICO
+// ─────────────────────────────────────────────────────────────
 
 function atualizarGradeMeses() {
   const container = document.getElementById("containerGradeMeses");
   if (!container) return;
 
-  const anoPrincipal = parseInt(document.getElementById("anoPagamento")?.value || 2026);
-  const incluirAnoSeguinte = document.getElementById("chkIncluirAnoSeguinte")?.checked || false;
   const crismandoId = parseInt(document.getElementById("crismandoIdSelecionado")?.value || 0);
+  const listaMesesCiclo = gerarMesesCicloAtivo();
 
-  const anosParaExibir = [anoPrincipal];
-  if (incluirAnoSeguinte) {
-    anosParaExibir.push(anoPrincipal + 1);
-  }
+  const mesInicio = window.configuracoesSistema.mes_inicio_ciclo;
+  const anoInicio = window.configuracoesSistema.ano_inicio_ciclo;
+  const anoFim = listaMesesCiclo[11].ano;
+  const nomeTurma = window.configuracoesSistema.nome_turma || "Crisma de Adultos";
 
-  let html = "";
-  anosParaExibir.forEach((ano) => {
-    html += `<div style="margin-bottom: 15px;">`;
-    html += `<div style="font-weight: bold; margin-bottom: 8px; color: #2c3e50;">📆 Ano ${ano}</div>`;
-    html += `<div class="meses-grid">`;
+  let html = `
+    <div style="margin-bottom: 12px; font-weight: bold; color: #2c3e50; font-size: 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+      <span>📅 Ciclo Catequético: ${ORDEM_MESES[mesInicio - 1]}/${anoInicio} a ${ORDEM_MESES[listaMesesCiclo[11].indiceMes]}/${anoFim} (${nomeTurma})</span>
+      <small style="color: #666; font-weight: normal;">Toque nos meses para selecionar</small>
+    </div>
+    <div class="month-tile-grid">
+  `;
 
-    ORDEM_MESES.forEach((mesNome, index) => {
-      const mesNum = String(index + 1).padStart(2, "0");
-      const idCheckbox = `chk_mes_${ano}_${mesNum}`;
-      
-      let jaPago = false;
-      if (crismandoId && pagamentos && pagamentos.length > 0) {
-        jaPago = pagamentos.some((p) => {
-          if (p.crismando_id !== crismandoId) return false;
-          const { mes, ano: a } = extrairMesAno(p);
-          return mes === mesNome && parseInt(a) === ano;
-        });
-      }
+  listaMesesCiclo.forEach((item) => {
+    const idChk = `chk_tile_${item.ano}_${item.mesNum}`;
+    
+    let jaPago = false;
+    if (crismandoId && pagamentos && pagamentos.length > 0) {
+      jaPago = pagamentos.some((p) => {
+        if (p.crismando_id !== crismandoId) return false;
+        const { mes, ano: a } = extrairMesAno(p);
+        return mes === item.mesNome && parseInt(a) === item.ano;
+      });
+    }
 
-      if (jaPago) {
-        html += `
-          <label class="mes-checkbox-label pago" title="Mês já quitado anteriormente">
-            <input type="checkbox" id="${idCheckbox}" data-mes="${mesNome}" data-ano="${ano}" disabled checked>
-            <span>${mesNome}</span>
-            <span class="badge-pago">Pago</span>
-          </label>
-        `;
-      } else {
-        html += `
-          <label class="mes-checkbox-label" id="label_${idCheckbox}">
-            <input type="checkbox" id="${idCheckbox}" data-mes="${mesNome}" data-ano="${ano}" onchange="toggleLabelStyle(this); recalcularValorTotal();">
-            <span>${mesNome}</span>
-          </label>
-        `;
-      }
-    });
-
-    html += `</div></div>`;
+    if (jaPago) {
+      html += `
+        <div class="month-tile paid" title="Mês já quitado anteriormente">
+          <input type="checkbox" id="${idChk}" data-mes="${item.mesNome}" data-ano="${item.ano}" disabled checked style="display: none;">
+          <span class="month-tile-name">${item.mesNome}</span>
+          <span class="month-tile-year">${item.ano}</span>
+          <span class="month-tile-status badge-pago">✅ PAGO</span>
+        </div>
+      `;
+    } else {
+      html += `
+        <div class="month-tile" id="tile_${idChk}" onclick="toggleTileMes('${idChk}')">
+          <input type="checkbox" id="${idChk}" data-mes="${item.mesNome}" data-ano="${item.ano}" style="display: none;" onchange="recalcularValorTotal()">
+          <span class="month-tile-name">${item.mesNome}</span>
+          <span class="month-tile-year">${item.ano}</span>
+          <span class="month-tile-status badge-aberto">☐ Aberto</span>
+        </div>
+      `;
+    }
   });
 
+  html += `</div>`;
   container.innerHTML = html;
   recalcularValorTotal();
 }
 
-function toggleLabelStyle(checkbox) {
-  const label = document.getElementById(`label_${checkbox.id}`);
-  if (label) {
-    if (checkbox.checked) {
-      label.classList.add("checked");
-    } else {
-      label.classList.remove("checked");
-    }
+function toggleTileMes(idCheckbox) {
+  const chk = document.getElementById(idCheckbox);
+  const tile = document.getElementById(`tile_${idCheckbox}`);
+  if (!chk || chk.disabled || !tile) return;
+
+  chk.checked = !chk.checked;
+  const statusSpan = tile.querySelector(".month-tile-status");
+
+  if (chk.checked) {
+    tile.classList.add("selected");
+    if (statusSpan) statusSpan.textContent = "☑️ SELECIONADO";
+  } else {
+    tile.classList.remove("selected");
+    if (statusSpan) statusSpan.textContent = "☐ Aberto";
   }
+
+  recalcularValorTotal();
 }
 
 function recalcularValorTotal() {
   const checkboxes = document.querySelectorAll('#containerGradeMeses input[type="checkbox"]:checked:not(:disabled)');
   const qtd = checkboxes.length;
 
-  const valorUnitarioInput = parseFloat(document.getElementById("valorUnitario")?.value || 10.00) || 0;
+  const valPadrao = window.configuracoesSistema.valor_mensal_padrao || 10.00;
+  const valorUnitarioInput = parseFloat(document.getElementById("valorUnitario")?.value || valPadrao) || 0;
   const valorTotal = qtd * valorUnitarioInput;
 
   const lblQtd = document.getElementById("lblQtdMesesSelecionados");
@@ -201,31 +336,65 @@ function recalcularValorTotal() {
   if (inputValorHidden) inputValorHidden.value = valorTotal;
 }
 
-// ✅ Registrar Pagamento em Lote (Multi-Mês / Multi-Ano)
+// ─────────────────────────────────────────────────────────────
+// REGISTRO DE PAGAMENTO FLASH (SUPABASE + RECIBO PENDENTE OU IMEDIATO)
+// ─────────────────────────────────────────────────────────────
+
 async function registrarPagamento() {
-  const crismandoId = parseInt(
-    document.getElementById("crismandoIdSelecionado")?.value
-  );
-  
+  let crismandoId = parseInt(document.getElementById("crismandoIdSelecionado")?.value || 0);
+  const campoBuscaVal = document.getElementById("campoBuscaCrismando")?.value.trim();
+
+  // Resolver automaticamente o crismando pelo nome digitado se o ID não foi preenchido via clique
+  if (!crismandoId && campoBuscaVal) {
+    const achadoExato = crismandos.find(c => c.nome.toLowerCase() === campoBuscaVal.toLowerCase());
+    if (achadoExato) {
+      crismandoId = achadoExato.id;
+      document.getElementById("crismandoIdSelecionado").value = achadoExato.id;
+    } else {
+      const achadosParciais = crismandos.filter(c => c.nome.toLowerCase().includes(campoBuscaVal.toLowerCase()));
+      if (achadosParciais.length === 1) {
+        crismandoId = achadosParciais[0].id;
+        document.getElementById("crismandoIdSelecionado").value = achadosParciais[0].id;
+        document.getElementById("campoBuscaCrismando").value = achadosParciais[0].nome;
+      }
+    }
+  }
+
   const checkboxesMarcados = Array.from(
     document.querySelectorAll('#containerGradeMeses input[type="checkbox"]:checked:not(:disabled)')
   );
-
-  const valorUnitario = parseFloat(document.getElementById("valorUnitario")?.value) || 0;
+  const valorUnitario = parseFloat(document.getElementById("valorUnitario")?.value) || window.configuracoesSistema.valor_mensal_padrao || 10.00;
+  const enviarAgora = document.getElementById("chkEnviarReciboImediato")?.checked || false;
 
   if (!crismandoId) {
-    alert("Por favor, selecione um crismando no campo de busca.");
+    alert("Por favor, digite e selecione um crismando no campo de busca.");
     return;
   }
 
   if (checkboxesMarcados.length === 0) {
-    alert("Por favor, marque pelo menos um mês a ser pago.");
+    alert("Por favor, selecione pelo menos um mês a ser pago na grade.");
     return;
   }
 
   if (valorUnitario <= 0) {
     alert("Por favor, informe um valor mensal válido.");
     return;
+  }
+
+  // Validação antierro de data/cronologia do ciclo
+  const mesInicio = parseInt(window.configuracoesSistema.mes_inicio_ciclo || 9);
+  const anoInicio = parseInt(window.configuracoesSistema.ano_inicio_ciclo || 2026);
+
+  for (let chk of checkboxesMarcados) {
+    const mesNome = chk.getAttribute("data-mes");
+    const anoNum = parseInt(chk.getAttribute("data-ano"));
+    const mesNum = ORDEM_MESES.indexOf(mesNome) + 1;
+
+    // Se o ano for menor que o ano de início OU se for no mesmo ano mas antes do mês de início
+    if (anoNum < anoInicio || (anoNum === anoInicio && mesNum < mesInicio)) {
+      const confirma = confirm(`⚠️ ALERTA DE DATA:\n\nO mês de ${mesNome}/${anoNum} é ANTERIOR ao início da turma ativa (${ORDEM_MESES[mesInicio - 1]}/${anoInicio}).\n\nDeseja realmente registrar este mês antigo?`);
+      if (!confirma) return;
+    }
   }
 
   try {
@@ -269,7 +438,7 @@ async function registrarPagamento() {
 
     if (error) throw error;
 
-    // Recarregar lista paginada do Supabase
+    // Recarregar pagamentos no estado local
     let todosPagamentos = [];
     let fromReg = 0;
     while (true) {
@@ -299,13 +468,53 @@ async function registrarPagamento() {
     window.dadosComprovanteAtual = resultadoComprovante.dadosComprovante;
     window.textoComprovanteAtual = resultadoComprovante.mensagemTexto;
 
-    alert(
-      `✅ ${checkboxesMarcados.length} pagamento(s) registrado(s) com sucesso!\n💰 Total: R$ ${valorTotalGeral.toFixed(2).replace(".", ",")}`
-    );
+    // LÓGICA DE DISPARO: IMEDIATO OU ACUMULADO EM LOTE POSTERIOR
+    if (enviarAgora) {
+      if (crismandoExiste.telefone) {
+        const enviadoOk = await enviarTextoEvolutionGo(
+          crismandoExiste.telefone,
+          resultadoComprovante.mensagemTexto
+        );
 
-    exibirModalComprovanteTexto(resultadoComprovante.mensagemTexto, crismandoExiste);
+        if (enviadoOk) {
+          alert(
+            `✅ PAGAMENTO E RECIBO REGISTRADOS COM SUCESSO!\n\n` +
+            `👤 Crismando: ${crismandoExiste.nome}\n` +
+            `💰 Total Quitado: R$ ${valorTotalGeral.toFixed(2).replace(".", ",")}\n` +
+            `📱 Recibo enviado com sucesso no WhatsApp de ${crismandoExiste.nome}!`
+          );
+        } else {
+          alert(
+            `✅ Pagamento de ${crismandoExiste.nome} (R$ ${valorTotalGeral.toFixed(2).replace(".", ",")}) registrado com sucesso no banco!\n\n` +
+            `⚠️ Contudo, a mensagem no WhatsApp não pôde ser entregue no momento. Verifique a conexão com o Evolution Go.`
+          );
+        }
+      } else {
+        alert(
+          `✅ Pagamento de ${crismandoExiste.nome} (R$ ${valorTotalGeral.toFixed(2).replace(".", ",")}) registrado com sucesso!\n\n` +
+          `⚠️ Crismando não possui número de telefone cadastrado para o envio do recibo.`
+        );
+      }
+    } else {
+      recibosPendentesEncontro.push({
+        crismando: crismandoExiste,
+        mesesAnos: listaMesesAnos,
+        valorTotal: valorTotalGeral,
+        mensagemTexto: resultadoComprovante.mensagemTexto,
+        dataHora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      });
 
-    // Limpar seleções
+      salvarRecibosPendentesLocal();
+
+      alert(
+        `✅ PAGAMENTO REGISTRADO COM SUCESSO!\n\n` +
+        `👤 Crismando: ${crismandoExiste.nome}\n` +
+        `💰 Total Quitado: R$ ${valorTotalGeral.toFixed(2).replace(".", ",")}\n` +
+        `🧾 O recibo foi adicionado à fila do encontro e SERÁ ENVIADO EM LOTE POSTERIORMENTE (no final do dia via Evolution Go).`
+      );
+    }
+
+    // Limpar formulário para próximo atendimento
     document.getElementById("campoBuscaCrismando").value = "";
     document.getElementById("crismandoIdSelecionado").value = "";
     document.getElementById("listaAutocompleteCrismando").innerHTML = "";
@@ -315,6 +524,32 @@ async function registrarPagamento() {
   } catch (error) {
     console.error("Erro ao registrar pagamento:", error);
     alert(`❌ Erro ao registrar pagamento: ${error.message || error}`);
+  }
+}
+
+function salvarRecibosPendentesLocal() {
+  localStorage.setItem("crisma_recibos_pendentes", JSON.stringify(recibosPendentesEncontro));
+  atualizarContadorRecibosPendentes();
+}
+
+function carregarRecibosPendentesLocal() {
+  const dados = localStorage.getItem("crisma_recibos_pendentes");
+  if (dados) {
+    try {
+      recibosPendentesEncontro = JSON.parse(dados) || [];
+    } catch (e) {
+      recibosPendentesEncontro = [];
+    }
+  }
+  atualizarContadorRecibosPendentes();
+}
+
+function atualizarContadorRecibosPendentes() {
+  const lblCount = document.getElementById("lblQtdRecibosPendentes");
+  const btnDisparar = document.getElementById("btnDispararRecibosPendentes");
+  if (lblCount) lblCount.textContent = recibosPendentesEncontro.length;
+  if (btnDisparar) {
+    btnDisparar.style.display = recibosPendentesEncontro.length > 0 ? "inline-flex" : "none";
   }
 }
 
@@ -346,10 +581,27 @@ function inicializarAutocompleteCrismando() {
       return;
     }
 
+    // Auto-atribuir ID se houver correspondência exata de nome
+    const exato = crismandos.find(c => c.nome.toLowerCase() === termo);
+    if (exato) {
+      campoId.value = exato.id;
+      const valInput = document.getElementById("valorUnitario");
+      const valPadrao = window.configuracoesSistema.valor_mensal_padrao || 10.00;
+      if (valInput) valInput.value = (exato.valor_mensal || valPadrao).toFixed(2);
+      atualizarGradeMeses();
+    } else if (filtrados.length === 1) {
+      campoId.value = filtrados[0].id;
+      const valInput = document.getElementById("valorUnitario");
+      const valPadrao = window.configuracoesSistema.valor_mensal_padrao || 10.00;
+      if (valInput) valInput.value = (filtrados[0].valor_mensal || valPadrao).toFixed(2);
+      atualizarGradeMeses();
+    }
+
     filtrados.forEach((c) => {
       const item = document.createElement("div");
       item.className = "autocomplete-item";
-      item.textContent = `${c.nome} (R$ ${(c.valor_mensal || 10).toFixed(2).replace(".", ",")})`;
+      const valPadrao = window.configuracoesSistema.valor_mensal_padrao || 10.00;
+      item.textContent = `${c.nome} (R$ ${(c.valor_mensal || valPadrao).toFixed(2).replace(".", ",")})`;
       item.style.cssText =
         "padding: 10px 12px; cursor: pointer; border-bottom: 1px solid #eee;";
       item.addEventListener("mouseenter", () => (item.style.background = "#f0f0f0"));
@@ -358,7 +610,7 @@ function inicializarAutocompleteCrismando() {
         campoBusca.value = c.nome;
         campoId.value = c.id;
         const valInput = document.getElementById("valorUnitario");
-        if (valInput) valInput.value = (c.valor_mensal || 10.00).toFixed(2);
+        if (valInput) valInput.value = (c.valor_mensal || valPadrao).toFixed(2);
         lista.innerHTML = "";
         lista.style.display = "none";
         atualizarGradeMeses();
@@ -379,7 +631,6 @@ function inicializarAutocompleteCrismando() {
   atualizarGradeMeses();
 }
 
-// Manter atualizarSelectCrismandos para não quebrar outras dependências
 function atualizarSelectCrismandos() {
   const select = document.getElementById("selectCrismando");
   if (!select) return;
@@ -389,7 +640,8 @@ function atualizarSelectCrismandos() {
     if (crismando && crismando.id && crismando.nome) {
       const option = document.createElement("option");
       option.value = crismando.id;
-      option.textContent = `${crismando.nome} - R$ ${(crismando.valor_mensal || 0).toFixed(2).replace(".", ",")}`;
+      const valPadrao = window.configuracoesSistema.valor_mensal_padrao || 10.00;
+      option.textContent = `${crismando.nome} - R$ ${(crismando.valor_mensal || valPadrao).toFixed(2).replace(".", ",")}`;
       select.appendChild(option);
     }
   });
@@ -399,7 +651,7 @@ async function removerCrismando(id) {
   if (!confirm("Tem certeza que deseja remover este crismando?")) return;
   try {
     const supabase = getSupabaseClient() || window.supabase;
-     if (!supabase) throw new Error("Cliente Supabase não inicializado");
+    if (!supabase) throw new Error("Cliente Supabase não inicializado");
     const { error } = await supabase.from("crismandos").delete().eq("id", id);
     if (error) throw error;
     crismandos = crismandos.filter((c) => c.id != id);
@@ -428,17 +680,25 @@ function gerarCodigoUnico() {
 
 async function registrarCodigoAutenticacao(dadosComprovante, codigo) {
   try {
+    let mesBanco = String(dadosComprovante.mes || "");
+    if (mesBanco.length > 20) {
+      mesBanco = mesBanco.substring(0, 17) + "...";
+    }
+
     const registro = {
       codigo,
       crismando_id: dadosComprovante.crismando.id,
       nome_crismando: dadosComprovante.crismando.nome,
-      mes: dadosComprovante.mes,
+      mes: mesBanco,
       ano: dadosComprovante.ano,
       valor: dadosComprovante.valor,
       data_vencimento: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
       ativo: true,
     };
-    const { data, error } = await supabase
+    const supabaseClient = getSupabaseClient() || window.supabaseClient;
+    if (!supabaseClient) throw new Error("Cliente Supabase não inicializado");
+
+    const { data, error } = await supabaseClient
       .from("codigos_autenticacao")
       .insert([registro])
       .select();

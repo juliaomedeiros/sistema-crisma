@@ -79,7 +79,7 @@
 
                 <!-- Registrar Pagamento -->
                 <div class="section">
-                    <h3>💰 Registrar Pagamento (Múltiplos Meses / Anos)</h3>
+                    <h3>💰 Registrar Pagamento (Ciclo Catequético)</h3>
                     <div class="form-grid">
                         <div class="form-group" style="grid-column: span 2;">
                             <label for="campoBuscaCrismando">Crismando:</label>
@@ -92,36 +92,18 @@
                         </div>
 
                         <div class="form-group">
-                            <label for="anoPagamento">Ano Principal:</label>
-                            <select id="anoPagamento" onchange="atualizarGradeMeses()" required>
-                                <option value="2026" selected>2026</option>
-                                <option value="2027">2027</option>
-                                <option value="2028">2028</option>
-                                <option value="2029">2029</option>
-                            </select>
-                        </div>
-
-                        <div class="form-group">
                             <label for="valorUnitario">Valor Mensal (R$):</label>
                             <input type="number" id="valorUnitario" placeholder="10.00" step="0.01" value="10.00" oninput="recalcularValorTotal()">
                         </div>
                     </div>
 
-                    <!-- Seleção Múltipla de Meses -->
+                    <!-- Seleção Múltipla de Meses (Grade Touch-Friendly do Ciclo) -->
                     <div class="meses-container">
-                        <div class="ano-seletor-container">
-                            <strong>📅 Selecione os meses a serem pagos:</strong>
-                            <label style="display: flex; align-items: center; gap: 5px; cursor: pointer; font-size: 13px;">
-                                <input type="checkbox" id="chkIncluirAnoSeguinte" onchange="atualizarGradeMeses()">
-                                <span>Incluir Ano Seguinte no Lançamento</span>
-                            </label>
-                        </div>
-
                         <div id="containerGradeMeses">
-                            <!-- Grade de meses preenchida dinamicamente via JS -->
+                            <!-- Grade de meses preenchida dinamicamente via JS baseada no ciclo catequético ativo -->
                         </div>
 
-                        <div style="margin-top: 15px; background: #e3f2fd; padding: 10px 15px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                        <div style="margin-top: 15px; background: #e3f2fd; padding: 12px 15px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                             <div>
                                 <strong>Meses Selecionados: <span id="lblQtdMesesSelecionados">0</span></strong>
                             </div>
@@ -130,12 +112,21 @@
                                 <input type="hidden" id="valorPagoTotalCalculado" value="0">
                             </div>
                         </div>
+
+                        <div style="margin-top: 10px; background: #fff8e1; border: 1px solid #ffe082; padding: 10px 14px; border-radius: 8px;">
+                            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: normal; cursor: pointer; color: #5d4037; margin: 0;">
+                                <input type="checkbox" id="chkEnviarReciboImediato">
+                                <span>⚡ Enviar recibo no WhatsApp no momento do pagamento (Se desmarcado, acumula para disparo em lote no fim do encontro)</span>
+                            </label>
+                        </div>
                     </div>
 
-                    <div class="button-group">
-                        <button class="btn btn-success" onclick="registrarPagamento()">💰 Registrar Pagamento(s)</button>
-                        <button class="btn btn-info" onclick="gerarComprovante()">🧾 Gerar Comprovante em Texto</button>
-                        <button class="btn btn-warning" onclick="enviarWhatsApp()">📱 Enviar via WhatsApp</button>
+                    <div class="button-group" style="display: flex; flex-wrap: wrap; gap: 10px;">
+                        <button class="btn btn-success" style="flex: 1; min-width: 200px;" onclick="registrarPagamento()">💰 Registrar Pagamento(s)</button>
+                        <button class="btn btn-info" style="flex: 1; min-width: 200px;" onclick="gerarComprovante()">🧾 Ver Comprovante em Texto</button>
+                        <button class="btn btn-warning" id="btnDispararRecibosPendentes" style="flex: 1; min-width: 220px; display: none; background: #f39c12; color: white;" onclick="dispararRecibosPendentesDoDia()">
+                            🧾 Disparar Recibos Pendentes do Encontro (<span id="lblQtdRecibosPendentes">0</span>)
+                        </button>
                     </div>
                 </div>
 
@@ -429,15 +420,70 @@
             </div>
 
             <!-- =========================================================
-                 ABA 5: EVOLUTION GO E PAINEL DE INADIMPLÊNCIA
+                 ABA 5: CONFIGURAÇÕES DA TURMA, EVOLUTION GO E INADIMPLÊNCIA
                  ========================================================= -->
             <div id="tabEvolution" class="tab-pane">
+                <!-- Painel de Configurações da Turma e Ciclo Catequético -->
                 <div class="section">
-                    <h3>⚙️ Conexão Evolution Go & Disparo de Cobranças</h3>
+                    <h3>⚙️ Configurações da Turma & Ciclo Catequético</h3>
+                    <p style="font-size: 13px; color: #555; margin-bottom: 15px;">
+                        Defina o mês e ano de início da turma em vigência e o valor mensal padrão. O formulário de pagamento adaptará a grade de meses automaticamente!
+                    </p>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="cfgNomeTurma">Nome da Turma / Edição:</label>
+                            <input type="text" id="cfgNomeTurma" placeholder="Crisma de Adultos 2026/2027">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="cfgMesInicioCiclo">Mês de Início do Ciclo:</label>
+                            <select id="cfgMesInicioCiclo">
+                                <option value="1">Janeiro</option>
+                                <option value="2">Fevereiro</option>
+                                <option value="3">Março</option>
+                                <option value="4">Abril</option>
+                                <option value="5">Maio</option>
+                                <option value="6">Junho</option>
+                                <option value="7">Julho</option>
+                                <option value="8">Agosto</option>
+                                <option value="9" selected>Setembro</option>
+                                <option value="10">Outubro</option>
+                                <option value="11">Novembro</option>
+                                <option value="12">Dezembro</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="cfgAnoInicioCiclo">Ano de Início do Ciclo:</label>
+                            <select id="cfgAnoInicioCiclo">
+                                <option value="2025">2025</option>
+                                <option value="2026" selected>2026</option>
+                                <option value="2027">2027</option>
+                                <option value="2028">2028</option>
+                                <option value="2029">2029</option>
+                                <option value="2030">2030</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="cfgValorMensalPadrao">Valor Mensal Padrão (R$):</label>
+                            <input type="number" id="cfgValorMensalPadrao" step="0.01" value="10.00">
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 10px;">
+                        <button class="btn btn-success" onclick="salvarConfiguracoesFormulario()">
+                            💾 Salvar Configurações da Turma
+                        </button>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>📱 Conexão Evolution Go & Disparo de Cobranças</h3>
                     <div style="background: #e3f2fd; border: 1px solid #90caf9; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
                         <h4 style="color: #1976d2; margin-bottom: 8px;">📡 Status do Servidor WhatsApp (Evolution Go)</h4>
                         <p style="font-size: 13px; color: #333; margin: 0;">
-                            O sistema de mensagens automáticas está atrelado ao servidor Evolution Go. Quando ativado, os lembretes de mensalidade e faltas são disparados em segundo plano.
+                            O sistema de mensagens automáticas está atrelado ao servidor Evolution Go. Quando ativado, os lembretes de mensalidade, comprovantes e avisos de faltas são disparados em segundo plano.
                         </p>
                     </div>
                     <button class="btn btn-warning" onclick="atualizarIndicadorInadimplencia(); alert('Painel de cobrança atualizado com sucesso!');">

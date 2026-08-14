@@ -467,3 +467,137 @@ tr:hover {
     }
 }
 
+/* ====================================================================
+   BANNER FLUTUANTE DE DISPARO EM SEGUNDO PLANO (BACKGROUND QUEUE)
+   ==================================================================== */
+.banner-disparo-bg {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-left: 5px solid #27ae60;
+    border-radius: 12px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+    padding: 14px 18px;
+    z-index: 9999;
+    max-width: 450px;
+    width: calc(100% - 40px);
+    animation: slideUpBanner 0.4s ease-out;
+}
+
+@keyframes slideUpBanner {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.spinner-disparo {
+    display: inline-block;
+    animation: pulseDisparo 1.5s infinite;
+}
+
+@keyframes pulseDisparo {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.2); }
+    100% { transform: scale(1); }
+}
+
+/* ====================================================================
+   GRADE DE MESES DO CICLO CATEQUÉTICO - TOUCH TILES (MOBILE/TABLET FIRST)
+   ==================================================================== */
+.month-tile-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 12px;
+    margin-top: 10px;
+}
+
+.month-tile {
+    padding: 14px 10px;
+    border: 2px solid #cbd5e1;
+    border-radius: 12px;
+    background: #ffffff;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.2s ease;
+    min-height: 70px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    user-select: none;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+}
+
+.month-tile:hover:not(.paid) {
+    border-color: #3b82f6;
+    background: #f0f9ff;
+    transform: translateY(-2px);
+}
+
+.month-tile.selected {
+    background: #dcfce7 !important;
+    border-color: #22c55e !important;
+    box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.3) !important;
+}
+
+.month-tile.paid {
+    background: #fee2e2 !important;
+    border-color: #ef4444 !important;
+    cursor: not-allowed;
+    opacity: 0.8;
+}
+
+.month-tile-name {
+    font-weight: 700;
+    font-size: 14px;
+    color: #1e293b;
+}
+
+.month-tile-year {
+    font-size: 12px;
+    color: #64748b;
+}
+
+.month-tile-status {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-top: 2px;
+}
+
+.badge-aberto {
+    color: #475569;
+    background: #f1f5f9;
+}
+
+.badge-pago {
+    color: #991b1b;
+    background: #fecaca;
+}
+
+@media (max-width: 480px) {
+    .month-tile-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+    }
+
+    .month-tile {
+        padding: 10px 6px;
+        min-height: 62px;
+    }
+
+    .month-tile-name {
+        font-size: 13px;
+    }
+}
+
+

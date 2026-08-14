@@ -1,7 +1,15 @@
-// js/evolution-service.js - Serviço REST Evolution Go (evolution-foundation/evolution-go) e Painel Inteligente de Cobrança
+// js/evolution-service.js - Serviço REST Evolution Go (evolution-foundation/evolution-go) e Painel Inteligente de Cobrança em Background
 
 window.disparoEmAndamento = false;
+window.detalhesDisparoAtual = {
+  total: 0,
+  enviados: 0,
+  falhas: 0,
+  contatoAtual: '',
+  pausaRestante: 0
+};
 
+// Envio de Texto via API REST do Evolution Go (compatível com Golang v0.7.x e Node API v1/v2)
 async function enviarTextoEvolutionGo(telefone, mensagem) {
   try {
     const baseUrl = ENV?.EVOLUTION_GO_URL || ENV?.EVOLUTION_API_URL;
@@ -16,10 +24,13 @@ async function enviarTextoEvolutionGo(telefone, mensagem) {
     const numLimpo = telefone.replace(/\D/g, "");
     const numFormatado = numLimpo.startsWith("55") ? numLimpo : "55" + numLimpo;
 
-    const url = `${baseUrl.replace(/\/$/, "")}/message/sendText/${instanceName}`;
+    // Rota oficial do Evolution Go em Golang v0.7.x (/send/text)
+    const urlPrimary = `${baseUrl.replace(/\/$/, "")}/send/text`;
 
     const payload = {
+      instance: instanceName,
       number: numFormatado,
+      text: mensagem,
       options: {
         delay: 1200,
         presence: "composing",
@@ -30,7 +41,7 @@ async function enviarTextoEvolutionGo(telefone, mensagem) {
       }
     };
 
-    const response = await fetch(url, {
+    let response = await fetch(urlPrimary, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -39,7 +50,35 @@ async function enviarTextoEvolutionGo(telefone, mensagem) {
       body: JSON.stringify(payload)
     });
 
-    if (response.ok) {
+    // Fallback 1: Rota /message/sendText
+    if (response.status === 404) {
+      console.warn("⚠️ Endpoint /send/text retornou 404. Tentando rota /message/sendText...");
+      const urlFallback1 = `${baseUrl.replace(/\/$/, "")}/message/sendText`;
+      response = await fetch(urlFallback1, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": apiKey
+        },
+        body: JSON.stringify(payload)
+      });
+    }
+
+    // Fallback 2: Rota legada Node /message/sendText/{instance}
+    if (response.status === 404) {
+      console.warn("⚠️ Endpoint /message/sendText retornou 404. Tentando rota /message/sendText/" + instanceName);
+      const urlFallback2 = `${baseUrl.replace(/\/$/, "")}/message/sendText/${instanceName}`;
+      response = await fetch(urlFallback2, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": apiKey
+        },
+        body: JSON.stringify(payload)
+      });
+    }
+
+    if (response.ok || response.status === 200 || response.status === 201) {
       console.log(`✅ Mensagem enviada com sucesso para ${numFormatado} via Evolution Go`);
       return true;
     } else {
@@ -136,12 +175,16 @@ function abrirPainelCobrancaInadimplentes(mesFiltro, anoFiltro) {
             <small style="color: #666;">📞 ${c.telefone || 'Sem telefone'} | Pendente: ${item.mes}/${item.ano} (R$ ${item.valor.toFixed(2).replace('.', ',')})</small>
           </div>
         </label>
-        <button class="btn btn-info" style="padding: 4px 8px; font-size: 11px;" onclick="abrirWhatsAppIndividual('${c.nome}', '${c.telefone}', '${item.mes}', ${item.ano}, ${item.valor})">
+        <button class="btn btn-info btn-indiv-whats" style="padding: 4px 10px; font-size: 12px;" onclick="enviarWhatsAppIndividualViaAPI(this, '${c.nome}', '${c.telefone}', '${item.mes}', ${item.ano}, ${item.valor})">
           📱 Enviar no Whats
         </button>
       </div>
     `;
   });
+
+  // Remover modal pré-existente se houver
+  const modalAntigo = document.getElementById("modalPainelCobranca");
+  if (modalAntigo) modalAntigo.remove();
 
   const modal = document.createElement("div");
   modal.id = "modalPainelCobranca";
@@ -164,8 +207,8 @@ function abrirPainelCobrancaInadimplentes(mesFiltro, anoFiltro) {
         ${htmlLinhas}
       </div>
 
-      <div id="progressoDisparoContainer" style="display: none; background: #e3f2fd; padding: 12px; border-radius: 8px; margin-bottom: 15px; text-align: center;">
-        <strong style="color: #1976d2;" id="statusProgressoTexto">Iniciando disparo...</strong>
+      <div id="progressoDisparoContainer" style="display: ${window.disparoEmAndamento ? 'block' : 'none'}; background: #e3f2fd; padding: 12px; border-radius: 8px; margin-bottom: 15px; text-align: center;">
+        <strong style="color: #1976d2;" id="statusProgressoTexto">Disparo em andamento em segundo plano...</strong>
         <div style="background: #ccc; height: 10px; border-radius: 5px; margin-top: 8px; overflow: hidden;">
           <div id="barraProgressoDisparo" style="background: #27ae60; width: 0%; height: 100%; transition: width 0.3s;"></div>
         </div>
@@ -173,9 +216,9 @@ function abrirPainelCobrancaInadimplentes(mesFiltro, anoFiltro) {
 
       <div style="display: flex; justify-content: space-between; gap: 10px;">
         <button class="btn btn-success" id="btnDispararLote" style="flex: 1;" onclick="iniciarDisparoLote('${mesFiltro}', ${anoFiltro})">
-          🚀 Disparar Lembretes em Lote (Evolution Go)
+          🚀 Disparar Lembretes em Lote (Em Background)
         </button>
-        <button class="btn btn-warning" id="btnCancelarDisparo" style="flex: 1; background: #e74c3c; display: none;" onclick="cancelarDisparoEmAndamento()">
+        <button class="btn btn-warning" id="btnCancelarDisparo" style="flex: 1; background: #e74c3c; display: ${window.disparoEmAndamento ? 'block' : 'none'};" onclick="cancelarDisparoEmAndamento()">
           🛑 Cancelar Disparo
         </button>
       </div>
@@ -188,7 +231,7 @@ function abrirPainelCobrancaInadimplentes(mesFiltro, anoFiltro) {
 function fecharModalCobranca() {
   const modal = document.getElementById("modalPainelCobranca");
   if (modal) modal.remove();
-  cancelarDisparoEmAndamento();
+  // NOTA: Fechar o modal NÃO cancela mais o disparo em lote! Ele continua rodando em segundo plano.
 }
 
 function toggleTodosDevedores(marcar) {
@@ -196,25 +239,41 @@ function toggleTodosDevedores(marcar) {
   checkboxes.forEach(c => c.checked = marcar);
 }
 
-function abrirWhatsAppIndividual(nome, telefone, mes, ano, valor) {
+// Disparo Individual automatizado via API REST Evolution Go (sem abrir wa.me)
+async function enviarWhatsAppIndividualViaAPI(btn, nome, telefone, mes, ano, valor) {
   let tel = telefone ? telefone.replace(/\D/g, "") : "";
   if (!tel) {
-    alert("Crismando não possui telefone cadastrado.");
+    alert(`O crismando ${nome} não possui telefone cadastrado.`);
     return;
   }
 
   const valorStr = parseFloat(valor).toFixed(2).replace(".", ",");
-  const msg = `Olá, ${nome}. Passando para lembrar sobre a contribuição da Crisma referente ao mês de *${mes}/${ano}* (Valor: R$ ${valorStr}). Se você já efetuou o pagamento recentemente, por favor desconsidere este aviso.\n\n"O Senhor é o meu pastor; nada me faltará." - Salmo 23:1. Que Deus abençoe você e sua família! 🙏`;
+  const msg = `Olá, ${nome}. Passando para lembrar sobre a contribuição da Crisma de adultos do Santuário Mãe Rainha referente ao mês de *${mes}/${ano}* (Valor: R$ ${valorStr}). Se você já efetuou o pagamento recentemente, por favor desconsidere este aviso.\n\n"Que Deus abençoe você e sua família! 🙏`;
 
-  const telFormatado = tel.startsWith("55") ? tel : "55" + tel;
-  const url = `https://wa.me/${telFormatado}?text=${encodeURIComponent(msg)}`;
-  window.open(url, "_blank");
+  const textoOriginal = btn.innerHTML;
+  btn.disabled = true;
+  btn.style.background = "#f39c12";
+  btn.innerHTML = "⏳ Enviando...";
+
+  const enviadoOk = await enviarTextoEvolutionGo(tel, msg);
+
+  if (enviadoOk) {
+    btn.innerHTML = "✅ Enviado!";
+    btn.style.background = "#27ae60";
+    btn.style.borderColor = "#27ae60";
+  } else {
+    btn.disabled = false;
+    btn.style.background = "#e74c3c";
+    btn.style.borderColor = "#e74c3c";
+    btn.innerHTML = "❌ Erro! Tentar Novamente";
+  }
 }
 
 function cancelarDisparoEmAndamento() {
   if (window.disparoEmAndamento) {
     window.disparoEmAndamento = false;
     alert("🛑 Disparo de lembretes cancelado pelo administrador!");
+    removerBannerDisparo();
     
     const btnDisparar = document.getElementById("btnDispararLote");
     const btnCancelar = document.getElementById("btnCancelarDisparo");
@@ -223,7 +282,13 @@ function cancelarDisparoEmAndamento() {
   }
 }
 
+// Inicia disparo em lote em segundo plano (background worker da SPA)
 async function iniciarDisparoLote(mesFiltro, anoFiltro) {
+  if (window.disparoEmAndamento) {
+    alert("⚠️ Já existe um disparo em lote em andamento no momento.");
+    return;
+  }
+
   const selecionados = Array.from(document.querySelectorAll(".chk-devedor-item:checked"));
 
   if (selecionados.length === 0) {
@@ -231,21 +296,17 @@ async function iniciarDisparoLote(mesFiltro, anoFiltro) {
     return;
   }
 
-  if (!confirm(`Deseja realmente disparar lembretes para os ${selecionados.length} crismandos selecionados?\n\nO envio utilizará o mecanismo Anti-Ban com intervalo randômico (15s a 45s) entre mensagens via Evolution Go.`)) {
+  if (!confirm(`Deseja iniciar o disparo para os ${selecionados.length} crismandos selecionados?\n\nO envio rodará em SEGUNDO PLANO na aplicação. Você poderá fechar esta janela, mudar de aba e registrar pagamentos livremente durante os envios.`)) {
     return;
   }
 
   window.disparoEmAndamento = true;
 
-  const btnDisparar = document.getElementById("btnDispararLote");
-  const btnCancelar = document.getElementById("btnCancelarDisparo");
-  const containerProgresso = document.getElementById("progressoDisparoContainer");
-  const txtProgresso = document.getElementById("statusProgressoTexto");
-  const barraProgresso = document.getElementById("barraProgressoDisparo");
+  // Fechar modal para permitir navegação livre pelo sistema
+  fecharModalCobranca();
 
-  if (btnDisparar) btnDisparar.style.display = "none";
-  if (btnCancelar) btnCancelar.style.display = "block";
-  if (containerProgresso) containerProgresso.style.display = "block";
+  // Exibir banner de controle no rodapé fixo
+  renderizarBannerDisparoBackground();
 
   let enviadosComSucesso = 0;
   let falhas = 0;
@@ -255,6 +316,11 @@ async function iniciarDisparoLote(mesFiltro, anoFiltro) {
     if (!window.disparoEmAndamento) {
       console.log("🛑 Disparo interrompido pelo usuário.");
       break;
+    }
+
+    // RENOVAR SESSÃO DO USUÁRIO A CADA MENSAGEM (KEEP-ALIVE)
+    if (window.auth && typeof window.auth.renovarSessao === "function") {
+      window.auth.renovarSessao();
     }
 
     const item = selecionados[i];
@@ -267,9 +333,7 @@ async function iniciarDisparoLote(mesFiltro, anoFiltro) {
 
     const msg = `Olá, ${nome}. Passando para lembrar sobre a contribuição da Crisma referente ao mês de *${mes}/${ano}* (Valor: R$ ${valorStr}). Se você já efetuou o pagamento recentemente, por favor desconsidere este aviso.\n\n"O Senhor é o meu pastor; nada me faltará." - Salmo 23:1. Que Deus abençoe você e sua família! 🙏`;
 
-    const pct = Math.round(((i + 1) / total) * 100);
-    if (barraProgresso) barraProgresso.style.width = `${pct}%`;
-    if (txtProgresso) txtProgresso.textContent = `Enviando ${i + 1} de ${total}: ${nome}...`;
+    atualizarBannerDisparo(i + 1, total, nome, 0);
 
     const enviadoOk = await enviarTextoEvolutionGo(tel, msg);
 
@@ -280,13 +344,18 @@ async function iniciarDisparoLote(mesFiltro, anoFiltro) {
       console.warn(`Disparo para ${nome} via Evolution Go falhou.`);
     }
 
+    // Intervalo Anti-Ban (15s a 45s) entre mensagens
     if (i < total - 1 && window.disparoEmAndamento) {
       const delaySegundos = Math.floor(Math.random() * (45 - 15 + 1)) + 15;
       for (let s = delaySegundos; s > 0; s--) {
         if (!window.disparoEmAndamento) break;
-        if (txtProgresso) {
-          txtProgresso.textContent = `Pausa Anti-Ban: aguardando ${s}s antes de enviar para o próximo (${i + 2}/${total})...`;
+        
+        // RENOVAR SESSÃO CONTINUAMENTE DURANTE A PAUSA
+        if (window.auth && typeof window.auth.renovarSessao === "function") {
+          window.auth.renovarSessao();
         }
+
+        atualizarBannerDisparo(i + 1, total, nome, s);
         await new Promise((resolve) => setTimeout(resolve, 1000));
       }
     }
@@ -294,9 +363,147 @@ async function iniciarDisparoLote(mesFiltro, anoFiltro) {
 
   window.disparoEmAndamento = false;
 
-  if (txtProgresso) txtProgresso.textContent = `✅ Disparo concluído! ${enviadosComSucesso} enviados, ${falhas} falhas/manuais.`;
-  if (btnDisparar) btnDisparar.style.display = "block";
-  if (btnCancelar) btnCancelar.style.display = "none";
+  if (enviadosComSucesso + falhas > 0) {
+    const msgFinal = `🏁 Disparo de lembretes em segundo plano concluído!\n\n✅ Sucessos: ${enviadosComSucesso}\n⚠️ Falhas: ${falhas}`;
+    alert(msgFinal);
+  }
 
-  alert(`🏁 Processo de disparo finalizado via Evolution Go!\n\n✅ Sucessos: ${enviadosComSucesso}\n⚠️ Falhas: ${falhas}`);
+  removerBannerDisparo();
 }
+
+// Renderiza a barra/banner flutuante de progresso em background no rodapé da SPA
+function renderizarBannerDisparoBackground() {
+  let banner = document.getElementById("bannerDisparoBackground");
+  if (!banner) {
+    banner = document.createElement("div");
+    banner.id = "bannerDisparoBackground";
+    banner.className = "banner-disparo-bg";
+    document.body.appendChild(banner);
+  }
+
+  banner.innerHTML = `
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 15px;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span class="spinner-disparo" style="font-size: 20px;">📱</span>
+        <div>
+          <strong id="bannerProgressoTitulo" style="color: #2c3e50; font-size: 13px;">Disparo de Lembretes Ativo</strong><br>
+          <small id="bannerProgressoStatus" style="color: #555; font-size: 12px;">Iniciando envio...</small>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <div style="width: 120px; background: #e0e0e0; height: 8px; border-radius: 4px; overflow: hidden;">
+          <div id="bannerBarraProgresso" style="width: 0%; background: #27ae60; height: 100%; transition: width 0.3s;"></div>
+        </div>
+        <button class="btn btn-warning" style="padding: 4px 8px; font-size: 11px; background: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer;" onclick="cancelarDisparoEmAndamento()">
+          🛑 Cancelar
+        </button>
+      </div>
+    </div>
+  `;
+  banner.style.display = "block";
+}
+
+function atualizarBannerDisparo(atual, total, nomeContato, tempoPausaSegundos) {
+  const banner = document.getElementById("bannerDisparoBackground");
+  if (!banner) return;
+
+  const pct = Math.round((atual / total) * 100);
+  const barra = document.getElementById("bannerBarraProgresso");
+  const txtTitulo = document.getElementById("bannerProgressoTitulo");
+  const txtStatus = document.getElementById("bannerProgressoStatus");
+
+  if (barra) barra.style.width = `${pct}%`;
+  if (txtTitulo) txtTitulo.textContent = `Disparo WhatsApp (${atual}/${total} — ${pct}%)`;
+
+  if (tempoPausaSegundos > 0) {
+    if (txtStatus) txtStatus.textContent = `Pausa Anti-Ban: aguardando ${tempoPausaSegundos}s... (Último: ${nomeContato})`;
+  } else {
+    if (txtStatus) txtStatus.textContent = `Enviando para: ${nomeContato}...`;
+  }
+}
+
+function removerBannerDisparo() {
+  const banner = document.getElementById("bannerDisparoBackground");
+  if (banner) banner.remove();
+}
+
+// Disparo em lote de recibos acumulados durante o atendimento presencial do encontro
+async function dispararRecibosPendentesDoDia() {
+  if (!recibosPendentesEncontro || recibosPendentesEncontro.length === 0) {
+    alert("Nenhum recibo pendente acumulado para envio.");
+    return;
+  }
+
+  if (window.disparoEmAndamento) {
+    alert("⚠️ Já existe um disparo em lote em andamento no momento.");
+    return;
+  }
+
+  const qtd = recibosPendentesEncontro.length;
+  if (!confirm(`Deseja disparar os ${qtd} recibo(s) acumulados do encontro?\n\nOs recibos serão enviados via Evolution Go em SEGUNDO PLANO com mecanismo Anti-Ban.`)) {
+    return;
+  }
+
+  window.disparoEmAndamento = true;
+  renderizarBannerDisparoBackground();
+
+  let enviadosOk = 0;
+  let falhas = 0;
+  const listaFila = [...recibosPendentesEncontro];
+
+  for (let i = 0; i < listaFila.length; i++) {
+    if (!window.disparoEmAndamento) {
+      console.log("🛑 Disparo de recibos interrompido pelo usuário.");
+      break;
+    }
+
+    if (window.auth && typeof window.auth.renovarSessao === "function") {
+      window.auth.renovarSessao();
+    }
+
+    const item = listaFila[i];
+    const nome = item.crismando.nome;
+    const tel = item.crismando.telefone;
+
+    atualizarBannerDisparo(i + 1, listaFila.length, nome, 0);
+
+    if (tel) {
+      const ok = await enviarTextoEvolutionGo(tel, item.mensagemTexto);
+      if (ok) {
+        enviadosOk++;
+        // Remover item enviado da fila de pendentes
+        const idx = recibosPendentesEncontro.indexOf(item);
+        if (idx > -1) recibosPendentesEncontro.splice(idx, 1);
+      } else {
+        falhas++;
+      }
+    } else {
+      falhas++;
+      console.warn(`Crismando ${nome} não tem telefone.`);
+    }
+
+    if (typeof salvarRecibosPendentesLocal === "function") {
+      salvarRecibosPendentesLocal();
+    } else {
+      atualizarContadorRecibosPendentes();
+    }
+
+    if (i < listaFila.length - 1 && window.disparoEmAndamento) {
+      const delaySegundos = Math.floor(Math.random() * (45 - 15 + 1)) + 15;
+      for (let s = delaySegundos; s > 0; s--) {
+        if (!window.disparoEmAndamento) break;
+        if (window.auth && typeof window.auth.renovarSessao === "function") {
+          window.auth.renovarSessao();
+        }
+        atualizarBannerDisparo(i + 1, listaFila.length, nome, s);
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    }
+  }
+
+  window.disparoEmAndamento = false;
+  removerBannerDisparo();
+
+  alert(`🏁 Disparo dos recibos do encontro concluído!\n\n✅ Sucessos: ${enviadosOk}\n⚠️ Falhas/Sem telefone: ${falhas}`);
+}
+

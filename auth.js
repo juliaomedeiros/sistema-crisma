@@ -1,4 +1,4 @@
-// auth.js - VERSÃO CORRIGIDA
+// auth.js - Sistema de Autenticação com Proteção Keep-Alive de Sessão durante Disparos em Background
 class AuthSystem {
     constructor() {
         this.isAuthenticated = false;
@@ -18,20 +18,17 @@ class AuthSystem {
         return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
     }
 
-    // CORREÇÃO: Inicializar Supabase antes do login
+    // Inicializar Supabase antes do login
     async initializeSupabaseForAuth() {
         try {
-            // Verificar se ENV está disponível
             if (typeof ENV === 'undefined') {
                 throw new Error('Variáveis de ambiente não carregadas');
             }
 
-            // Verificar se a biblioteca Supabase está carregada
             if (typeof window.supabase === 'undefined') {
                 throw new Error('Biblioteca Supabase não carregada');
             }
 
-            // Usar o cliente global se existir, senão criar
             if (!window.supabaseClient) {
                 window.supabaseClient = window.supabase.createClient(
                     ENV.SUPABASE_URL,
@@ -48,25 +45,19 @@ class AuthSystem {
         }
     }
 
-    // Função de login corrigida
+    // Função de login
     async login(usuario, senha) {
         try {
             console.log('🔄 Iniciando processo de login...');
 
-            // CORREÇÃO: Inicializar Supabase primeiro
             const supabaseClient = await this.initializeSupabaseForAuth();
 
             if (!supabaseClient) {
                 throw new Error('Falha na inicialização do banco de dados');
             }
 
-            console.log('✅ Cliente Supabase inicializado para login');
-
-            // Hash da senha
             const senhaHash = await this.hashSenha(senha);
-            console.log('🔐 Senha processada');
 
-            // Verificar credenciais no banco
             const { data, error } = await supabaseClient
                 .from('usuarios_autenticados')
                 .select('*')
@@ -79,21 +70,15 @@ class AuthSystem {
                 throw new Error('Usuário não encontrado ou inativo');
             }
 
-            console.log('✅ Usuário encontrado no banco');
-
-            // Verificar se está bloqueado
             if (data.bloqueado_ate && new Date(data.bloqueado_ate) > new Date()) {
                 const tempoRestante = Math.ceil((new Date(data.bloqueado_ate) - new Date()) / 60000);
                 throw new Error(`Usuário bloqueado. Tente novamente em ${tempoRestante} minutos.`);
             }
 
-            // Verificar senha
             if (data.senha !== senhaHash) {
-                // Incrementar tentativas
                 const novasTentativas = (data.tentativas_login || 0) + 1;
                 const updateData = { tentativas_login: novasTentativas };
 
-                // Bloquear após 3 tentativas
                 if (novasTentativas >= this.maxTentativas) {
                     updateData.bloqueado_ate = new Date(Date.now() + 15 * 60 * 1000).toISOString();
                 }
@@ -106,7 +91,6 @@ class AuthSystem {
                 throw new Error(`Senha incorreta. Tentativas restantes: ${this.maxTentativas - novasTentativas}`);
             }
 
-            // Login bem-sucedido - resetar tentativas e atualizar último login
             await supabaseClient
                 .from('usuarios_autenticados')
                 .update({
@@ -116,7 +100,6 @@ class AuthSystem {
                 })
                 .eq('id', data.id);
 
-            // Configurar sessão
             this.isAuthenticated = true;
             this.currentUser = {
                 id: data.id,
@@ -125,7 +108,6 @@ class AuthSystem {
                 email: data.email
             };
 
-            // Salvar sessão no localStorage
             const sessionData = {
                 user: this.currentUser,
                 loginTime: Date.now(),
@@ -144,6 +126,21 @@ class AuthSystem {
         }
     }
 
+    // Renova o tempo de sessão em localStorage e reseta o temporizador de expiração
+    renovarSessao() {
+        const sessionData = localStorage.getItem('crisma_session');
+        if (!sessionData) return;
+        try {
+            const session = JSON.parse(sessionData);
+            session.expiresAt = Date.now() + this.sessionTimeout;
+            localStorage.setItem('crisma_session', JSON.stringify(session));
+            this.startSessionTimer();
+            console.log('🔄 Sessão de usuário auto-renovada (Keep-Alive Ativo)');
+        } catch (e) {
+            console.error('Erro ao renovar sessão:', e);
+        }
+    }
+
     // Verificar sessão existente
     checkSession() {
         const sessionData = localStorage.getItem('crisma_session');
@@ -152,13 +149,18 @@ class AuthSystem {
         try {
             const session = JSON.parse(sessionData);
 
-            // Verificar se não expirou
+            // Verificar se expirou
             if (Date.now() > session.expiresAt) {
-                this.logout();
-                return false;
+                // Se houver disparo em andamento, impedir o logout e renovar a sessão
+                if (window.disparoEmAndamento) {
+                    console.log('🔄 Disparo de mensagens ativo. Impedindo logout e renovando sessão...');
+                    this.renovarSessao();
+                } else {
+                    this.logout();
+                    return false;
+                }
             }
 
-            // Restaurar sessão
             this.isAuthenticated = true;
             this.currentUser = session.user;
             this.startSessionTimer();
@@ -173,20 +175,31 @@ class AuthSystem {
 
     // Logout
     logout() {
+        // Se houver disparo em andamento, bloquear logout não intencional
+        if (window.disparoEmAndamento) {
+            console.warn('⚠️ Tentativa de logout bloqueada pois há um disparo em lote em andamento.');
+            this.renovarSessao();
+            return;
+        }
+
         this.isAuthenticated = false;
         this.currentUser = null;
         localStorage.removeItem('crisma_session');
         this.clearSessionTimer();
 
-        // Redirecionar para login
         this.showLoginPage();
     }
 
-    // Gerenciar timer de sessão
+    // Gerenciar timer de sessão com proteção Keep-Alive durante disparos
     startSessionTimer() {
         this.clearSessionTimer();
         this.sessionTimer = setTimeout(() => {
-            alert('⏰ Sessão expirada. Você será redirecionado para o login.');
+            if (window.disparoEmAndamento) {
+                console.log('🔄 Disparo em lote ativo no momento do timeout. Renovando sessão por mais 30 min...');
+                this.renovarSessao();
+                return;
+            }
+            alert('⏰ Sessão expirada por inatividade. Você será redirecionado para o login.');
             this.logout();
         }, this.sessionTimeout);
     }
@@ -198,7 +211,6 @@ class AuthSystem {
         }
     }
 
-    // Verificar se usuário está autenticado
     requireAuth() {
         if (!this.isAuthenticated) {
             alert('🔒 Acesso negado. Faça login primeiro.');
@@ -208,13 +220,11 @@ class AuthSystem {
         return true;
     }
 
-    // Mostrar página de login
     showLoginPage() {
         document.body.innerHTML = this.getLoginHTML();
         this.setupLoginEvents();
     }
 
-    // HTML da página de login (mantém o mesmo do arquivo original)
     getLoginHTML() {
         return `
         <!DOCTYPE html>
@@ -448,7 +458,6 @@ class AuthSystem {
         `;
     }
 
-    // Configurar eventos do login
     setupLoginEvents() {
         const loginForm = document.getElementById('loginForm');
         const errorMessage = document.getElementById('errorMessage');
@@ -466,7 +475,6 @@ class AuthSystem {
                 return;
             }
 
-            // Mostrar loading
             loginBtn.disabled = true;
             loginBtn.textContent = 'Verificando...';
             loading.style.display = 'block';
@@ -478,7 +486,7 @@ class AuthSystem {
                 if (result.success) {
                     loginBtn.textContent = '✅ Sucesso! Redirecionando...';
                     setTimeout(() => {
-                        location.reload(); // Recarregar página principal
+                        location.reload();
                     }, 1000);
                 } else {
                     this.showError(result.error);
@@ -493,17 +501,14 @@ class AuthSystem {
             }
         });
 
-        // Focar no campo usuário
         document.getElementById('usuario').focus();
     }
 
-    // Mostrar erro
     showError(message) {
         const errorMessage = document.getElementById('errorMessage');
         errorMessage.textContent = message;
         errorMessage.style.display = 'block';
 
-        // Animar erro
         errorMessage.style.animation = 'none';
         setTimeout(() => {
             errorMessage.style.animation = 'slideUp 0.3s ease-out';
@@ -511,5 +516,4 @@ class AuthSystem {
     }
 }
 
-// Instância global
 window.auth = new AuthSystem();
