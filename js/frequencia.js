@@ -128,6 +128,83 @@ async function criarNovoEncontro() {
   }
 }
 
+window.termoBuscaChamada = "";
+window.filtroStatusChamada = "TODOS";
+
+function filtrarTabelaChamada() {
+  const inp = document.getElementById("buscaCrismandoChamada");
+  window.termoBuscaChamada = inp ? inp.value.trim().toLowerCase() : "";
+  atualizarTabelaChamada();
+}
+
+function filtrarStatusChamada(status) {
+  window.filtroStatusChamada = status;
+
+  // Atualizar classe ativa nos chips de filtro
+  document.querySelectorAll(".chip-filtro-chamada").forEach(btn => btn.classList.remove("active"));
+  const btnAtivo = document.getElementById(`chipFiltro_${status}`);
+  if (btnAtivo) btnAtivo.classList.add("active");
+
+  atualizarTabelaChamada();
+}
+
+function marcarTodosPresentesChamada() {
+  if (!crismandos || crismandos.length === 0) return;
+
+  crismandos.forEach(c => {
+    const radioP = document.querySelector(`input[name="status_presenca_${c.id}"][value="PRESENTE"]`);
+    if (radioP) {
+      radioP.checked = true;
+      atualizarEstiloPílulasChamada(c.id);
+    }
+  });
+
+  atualizarContadoresFiltrosChamada();
+}
+
+function atualizarEstiloPílulasChamada(crismandoId) {
+  const radioChecked = document.querySelector(`input[name="status_presenca_${crismandoId}"]:checked`);
+  const statusVal = radioChecked ? radioChecked.value : "PRESENTE";
+
+  const pillP = document.getElementById(`pill_P_${crismandoId}`);
+  const pillF = document.getElementById(`pill_F_${crismandoId}`);
+  const pillJ = document.getElementById(`pill_J_${crismandoId}`);
+
+  if (pillP) pillP.classList.toggle("active", statusVal === "PRESENTE");
+  if (pillF) pillF.classList.toggle("active", statusVal === "FALTA");
+  if (pillJ) pillJ.classList.toggle("active", statusVal === "JUSTIFICADO");
+
+  atualizarContadoresFiltrosChamada();
+}
+
+function atualizarContadoresFiltrosChamada() {
+  let cntTodos = 0;
+  let cntP = 0;
+  let cntF = 0;
+  let cntJ = 0;
+
+  if (crismandos) {
+    cntTodos = crismandos.length;
+    crismandos.forEach(c => {
+      const radio = document.querySelector(`input[name="status_presenca_${c.id}"]:checked`);
+      const val = radio ? radio.value : "PRESENTE";
+      if (val === "PRESENTE") cntP++;
+      else if (val === "FALTA") cntF++;
+      else if (val === "JUSTIFICADO") cntJ++;
+    });
+  }
+
+  const elTodos = document.getElementById("cntFiltro_TODOS");
+  const elP = document.getElementById("cntFiltro_PRESENTE");
+  const elF = document.getElementById("cntFiltro_FALTA");
+  const elJ = document.getElementById("cntFiltro_JUSTIFICADO");
+
+  if (elTodos) elTodos.textContent = cntTodos;
+  if (elP) elP.textContent = cntP;
+  if (elF) elF.textContent = cntF;
+  if (elJ) elJ.textContent = cntJ;
+}
+
 function atualizarTabelaChamada() {
   const tbody = document.getElementById("corpoTabelaChamada");
   if (!tbody) return;
@@ -138,13 +215,37 @@ function atualizarTabelaChamada() {
 
   if (!crismandos || crismandos.length === 0) {
     tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:#888;">Nenhum crismando cadastrado.</td></tr>`;
+    atualizarContadoresFiltrosChamada();
     return;
   }
 
   // Filtrar presenças salvas para este encontro específico
   const presencasDoEncontro = presencas.filter(p => p.encontro_id === encontroId);
 
-  crismandos.forEach(c => {
+  const termo = window.termoBuscaChamada || "";
+  const filtroStatus = window.filtroStatusChamada || "TODOS";
+
+  let crismandosExibidos = crismandos.filter(c => {
+    // Filtro por nome
+    const bateNome = !termo || c.nome.toLowerCase().includes(termo);
+    if (!bateNome) return false;
+
+    // Filtro por status selecionado
+    const pSalva = presencasDoEncontro.find(p => p.crismando_id === c.id);
+    const radioElem = document.querySelector(`input[name="status_presenca_${c.id}"]:checked`);
+    const statusAtual = radioElem ? radioElem.value : (pSalva ? pSalva.status : "PRESENTE");
+
+    if (filtroStatus === "TODOS") return true;
+    return statusAtual === filtroStatus;
+  });
+
+  if (crismandosExibidos.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:#888; padding: 20px;">Nenhum crismando encontrado para os filtros aplicados.</td></tr>`;
+    atualizarContadoresFiltrosChamada();
+    return;
+  }
+
+  crismandosExibidos.forEach(c => {
     const qtdFaltas = mapaFaltasAcumuladas[c.id] || 0;
     const badgeHTML = obterBadgeFaltas(qtdFaltas);
 
@@ -154,34 +255,38 @@ function atualizarTabelaChamada() {
 
     const tr = document.createElement("tr");
     tr.id = `linha_chamada_${c.id}`;
-    
+
     tr.innerHTML = `
       <td><strong>${c.nome}</strong></td>
       <td>${c.telefone || "-"}</td>
       <td>${badgeHTML}</td>
       <td>
-        <div style="display: flex; gap: 8px;">
-          <label style="cursor:pointer; display:flex; align-items:center; gap:3px;">
-            <input type="radio" name="status_presenca_${c.id}" value="PRESENTE" ${statusSalvo === "PRESENTE" ? "checked" : ""}>
-            <span style="color:#27ae60; font-weight:bold;">P</span>
+        <div class="radio-group-chamada">
+          <label id="pill_P_${c.id}" class="radio-pill-item pill-presente ${statusSalvo === 'PRESENTE' ? 'active' : ''}">
+            <input type="radio" name="status_presenca_${c.id}" value="PRESENTE" ${statusSalvo === 'PRESENTE' ? 'checked' : ''} onchange="atualizarEstiloPílulasChamada(${c.id})">
+            P
           </label>
-          <label style="cursor:pointer; display:flex; align-items:center; gap:3px;">
-            <input type="radio" name="status_presenca_${c.id}" value="FALTA" ${statusSalvo === "FALTA" ? "checked" : ""}>
-            <span style="color:#c0392b; font-weight:bold;">F</span>
+
+          <label id="pill_F_${c.id}" class="radio-pill-item pill-falta ${statusSalvo === 'FALTA' ? 'active' : ''}">
+            <input type="radio" name="status_presenca_${c.id}" value="FALTA" ${statusSalvo === 'FALTA' ? 'checked' : ''} onchange="atualizarEstiloPílulasChamada(${c.id})">
+            F
           </label>
-          <label style="cursor:pointer; display:flex; align-items:center; gap:3px;">
-            <input type="radio" name="status_presenca_${c.id}" value="JUSTIFICADO" ${statusSalvo === "JUSTIFICADO" ? "checked" : ""}>
-            <span style="color:#f39c12; font-weight:bold;">J</span>
+
+          <label id="pill_J_${c.id}" class="radio-pill-item pill-justificado ${statusSalvo === 'JUSTIFICADO' ? 'active' : ''}">
+            <input type="radio" name="status_presenca_${c.id}" value="JUSTIFICADO" ${statusSalvo === 'JUSTIFICADO' ? 'checked' : ''} onchange="atualizarEstiloPílulasChamada(${c.id})">
+            J
           </label>
         </div>
       </td>
       <td>
-        <input type="text" id="obs_presenca_${c.id}" placeholder="Obs (opcional)" value="${pSalva?.observacao || ""}" style="padding:4px 8px; font-size:12px;">
+        <input type="text" id="obs_presenca_${c.id}" placeholder="Obs (opcional)" value="${pSalva?.observacao || ''}" style="padding:5px 8px; font-size:12px; border:1px solid #cbd5e1; border-radius:4px; width: 100%;">
       </td>
     `;
 
     tbody.appendChild(tr);
   });
+
+  atualizarContadoresFiltrosChamada();
 }
 
 async function salvarChamadaEncontro() {
@@ -254,39 +359,143 @@ async function salvarChamadaEncontro() {
 function exibirModalNotificacaoFaltas(faltosos, dataEncontroStr) {
   let htmlTextos = "";
 
-  faltosos.forEach(item => {
+  faltosos.forEach((item, index) => {
     const c = item.crismando;
     const totalF = item.totalFaltas;
     const msg = `Olá, ${c.nome}. Registramos a sua ausência no encontro da Crisma do dia *${dataEncontroStr}*. Lembramos que o limite tolerado pela coordenação é de 7 faltas e no momento você possui *${totalF} falta(s)* acumulada(s).\n\n"Eu sou o caminho, a verdade e a vida." - João 14:6. Contamos com sua presença no próximo encontro! 🙏`;
 
-    let tel = c.telefone ? c.telefone.replace(/\D/g, "") : "";
-    let telFormatado = tel.startsWith("55") ? tel : "55" + tel;
-    let urlWa = `https://wa.me/${telFormatado}?text=${encodeURIComponent(msg)}`;
-
     htmlTextos += `
-      <div style="border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 10px;">
-        <strong>👤 ${c.nome} (Total: ${totalF} faltas)</strong><br>
-        <div style="background: #f8f9fa; padding: 8px; border-radius: 5px; font-size: 12px; margin: 5px 0;">${msg}</div>
-        <a href="${urlWa}" target="_blank" class="btn btn-warning" style="padding: 4px 10px; font-size: 12px; text-decoration: none; display: inline-block;">
-          📱 Enviar Aviso no WhatsApp
-        </a>
+      <div style="border-bottom: 1px solid #eee; padding-bottom: 12px; margin-bottom: 12px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:5px;">
+          <strong>👤 ${c.nome} (Total: ${totalF} faltas)</strong>
+          <button id="btnEnvFalta_${index}" class="btn btn-warning" style="padding: 4px 10px; font-size: 12px;" onclick="enviarAvisoFaltaIndividual(this, '${c.nome}', '${c.telefone || ''}', '${dataEncontroStr}', ${totalF})">
+            📱 Enviar Aviso via Evolution Go
+          </button>
+        </div>
+        <div style="background: #f8f9fa; padding: 8px; border-radius: 5px; font-size: 12px; margin-top: 5px; color: #555;">${msg}</div>
       </div>
     `;
   });
 
   const modal = document.createElement("div");
   modal.className = "modal";
+  modal.id = "modalNotificacaoFaltas";
   modal.style.display = "block";
   modal.innerHTML = `
-    <div class="modal-content" style="max-width: 600px;">
+    <div class="modal-content" style="max-width: 650px;">
       <span class="close" onclick="this.parentElement.parentElement.remove()">&times;</span>
-      <h3 style="color: #c0392b; margin-bottom: 15px; text-align: center;">📱 Notificações de Falta (${faltosos.length})</h3>
-      <p style="font-size: 13px; color: #555; margin-bottom: 15px;">Os crismandos abaixo receberam registro de ausência. Clique no botão de cada um para abrir o aviso via WhatsApp:</p>
-      <div style="max-height: 350px; overflow-y: auto;">${htmlTextos}</div>
-      <div style="text-align: center; margin-top: 15px;">
-        <button class="btn btn-primary" onclick="this.parentElement.parentElement.parentElement.remove()">✅ Fechar</button>
+      <h3 style="color: #c0392b; margin-bottom: 10px; text-align: center;">📱 Notificações de Ausência (${faltosos.length})</h3>
+      <p style="font-size: 13px; color: #555; margin-bottom: 15px;">Os crismandos abaixo receberam registro de falta neste encontro. Dispare os avisos via WhatsApp Evolution Go:</p>
+      
+      <div style="max-height: 350px; overflow-y: auto; margin-bottom: 15px; padding-right: 5px;">${htmlTextos}</div>
+      
+      <div style="display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
+        <button class="btn btn-success" style="flex: 1;" onclick="dispararAvisosFaltaEmLote('${dataEncontroStr}')">
+          🚀 Disparar Todos Avisos de Falta via Evolution Go (Background)
+        </button>
+        <button class="btn btn-secondary" style="background:#6c757d; color:white;" onclick="this.parentElement.parentElement.parentElement.remove()">
+          Fechar
+        </button>
       </div>
     </div>
   `;
   document.body.appendChild(modal);
+}
+
+// Disparo individual de aviso de falta via Evolution Go REST API
+async function enviarAvisoFaltaIndividual(btn, nome, telefone, dataEncontroStr, totalFaltas) {
+  let tel = telefone ? telefone.replace(/\D/g, "") : "";
+  if (!tel) {
+    alert(`O crismando ${nome} não possui telefone cadastrado.`);
+    return;
+  }
+
+  const msg = `Olá, ${nome}. Registramos a sua ausência no encontro da Crisma do dia *${dataEncontroStr}*. Lembramos que o limite tolerado pela coordenação é de 7 faltas e no momento você possui *${totalFaltas} falta(s)* acumulada(s).\n\n"Eu sou o caminho, a verdade e a vida." - João 14:6. Contamos com sua presença no próximo encontro! 🙏`;
+
+  btn.disabled = true;
+  btn.style.background = "#f39c12";
+  btn.innerHTML = "⏳ Enviando...";
+
+  const ok = await enviarTextoEvolutionGo(tel, msg);
+
+  if (ok) {
+    btn.innerHTML = "✅ Enviado!";
+    btn.style.background = "#27ae60";
+    btn.style.borderColor = "#27ae60";
+  } else {
+    btn.disabled = false;
+    btn.style.background = "#e74c3c";
+    btn.style.borderColor = "#e74c3c";
+    btn.innerHTML = "❌ Erro! Tentar Novamente";
+  }
+}
+
+// Disparo em lote dos avisos de falta em background via Evolution Go
+async function dispararAvisosFaltaEmLote(dataEncontroStr) {
+  const modal = document.getElementById("modalNotificacaoFaltas");
+  if (modal) modal.remove();
+
+  // Encontrar crismandos faltosos do encontro atual
+  const encontroId = parseInt(document.getElementById("selectEncontroChamada")?.value || 0);
+  const presencasDoEncontro = presencas.filter(p => p.encontro_id === encontroId && p.status === "FALTA");
+
+  if (presencasDoEncontro.length === 0) {
+    alert("Nenhuma falta registrada para este encontro.");
+    return;
+  }
+
+  const listaFaltosos = [];
+  presencasDoEncontro.forEach(p => {
+    const c = crismandos.find(cr => cr.id === p.crismando_id);
+    if (c && c.telefone) {
+      const totalF = mapaFaltasAcumuladas[c.id] || 1;
+      const msg = `Olá, ${c.nome}. Registramos a sua ausência no encontro da Crisma do dia *${dataEncontroStr}*. Lembramos que o limite tolerado pela coordenação é de 7 faltas e no momento você possui *${totalF} falta(s)* acumulada(s).\n\n"Eu sou o caminho, a verdade e a vida." - João 14:6. Contamos com sua presença no próximo encontro! 🙏`;
+      listaFaltosos.push({ crismando: c, mensagemTexto: msg });
+    }
+  });
+
+  if (listaFaltosos.length === 0) {
+    alert("Nenhum dos crismandos faltosos possui telefone cadastrado.");
+    return;
+  }
+
+  if (window.disparoEmAndamento) {
+    alert("⚠️ Já existe um disparo em lote em andamento. Aguarde a conclusão.");
+    return;
+  }
+
+  window.disparoEmAndamento = true;
+  renderizarBannerDisparoBackground();
+
+  let enviados = 0;
+  for (let i = 0; i < listaFaltosos.length; i++) {
+    if (!window.disparoEmAndamento) break;
+
+    if (window.auth && typeof window.auth.renovarSessao === "function") {
+      window.auth.renovarSessao();
+    }
+
+    const item = listaFaltosos[i];
+    atualizarBannerDisparo(i + 1, listaFaltosos.length, item.crismando.nome, 0);
+
+    const ok = await enviarTextoEvolutionGo(item.crismando.telefone, item.mensagemTexto);
+    if (ok) enviados++;
+
+    if (i < listaFaltosos.length - 1 && window.disparoEmAndamento) {
+      const delay = Math.floor(Math.random() * (45 - 15 + 1)) + 15;
+      for (let s = delay; s > 0; s--) {
+        if (!window.disparoEmAndamento) break;
+        if (window.auth && typeof window.auth.renovarSessao === "function") {
+          window.auth.renovarSessao();
+        }
+        atualizarBannerDisparo(i + 1, listaFaltosos.length, item.crismando.nome, s);
+        await new Promise(res => setTimeout(res, 1000));
+      }
+    }
+  }
+
+  window.disparoEmAndamento = false;
+  removerBannerDisparo();
+
+  alert(`🏁 Disparo dos avisos de falta concluído!\n\n✅ Mensagens entregues: ${enviados}`);
 }

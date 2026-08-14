@@ -600,4 +600,72 @@ tr:hover {
     }
 }
 
+/* ====================================================================
+   CHIPS DE FILTRO E BOTÕES PÍLULA DE CHAMADA (MOBILE FIRST)
+   ==================================================================== */
+.chip-filtro-chamada {
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.chip-filtro-chamada:hover {
+    background: #e2e8f0;
+}
+
+.chip-filtro-chamada.active {
+    background: #1e293b;
+    color: #ffffff;
+    border-color: #1e293b;
+}
+
+.radio-group-chamada {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.radio-pill-item {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    user-select: none;
+    transition: all 0.2s ease;
+}
+
+.radio-pill-item input {
+    display: none;
+}
+
+.radio-pill-item.pill-presente.active {
+    background: #dcfce7;
+    color: #15803d;
+    border-color: #22c55e;
+}
+
+.radio-pill-item.pill-falta.active {
+    background: #fee2e2;
+    color: #b91c1c;
+    border-color: #ef4444;
+}
+
+.radio-pill-item.pill-justificado.active {
+    background: #fef3c7;
+    color: #b45309;
+    border-color: #f59e0b;
+}
+
 

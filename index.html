@@ -286,12 +286,31 @@
                         </div>
                     </div>
 
-                    <!-- Tabela de Chamada -->
+                    <!-- Tabela e Controles de Chamada -->
                     <div style="margin-top: 15px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; margin-bottom: 10px;">
-                            <h4 style="color: #2c3e50;">👥 Lista de Chamada dos Crismandos</h4>
-                            <button class="btn btn-success" onclick="salvarChamadaEncontro()">💾 Salvar Chamada do Encontro</button>
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 15px;">
+                            <h4 style="color: #2c3e50; margin: 0;">👥 Lista de Chamada dos Crismandos</h4>
+                            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                                <button class="btn btn-info" onclick="marcarTodosPresentesChamada()">☑️ Marcar Todos Presentes</button>
+                                <button class="btn btn-success" onclick="salvarChamadaEncontro()">💾 Salvar Chamada do Encontro</button>
+                            </div>
                         </div>
+
+                        <!-- Barra de Busca Instantânea e Filtros de Status (Mobile / Tablet First) -->
+                        <div style="background: #ffffff; border: 1px solid #cbd5e1; padding: 12px; border-radius: 8px; margin-bottom: 15px;">
+                            <div class="form-group" style="margin-bottom: 10px;">
+                                <label for="buscaCrismandoChamada" style="font-weight: bold; color: #1e293b;">🔍 Buscar Crismando por Nome:</label>
+                                <input type="text" id="buscaCrismandoChamada" placeholder="Digite o nome para filtrar instantaneamente..." oninput="filtrarTabelaChamada()" style="width: 100%; padding: 8px 12px; font-size: 14px; border: 1px solid #cbd5e1; border-radius: 6px;">
+                            </div>
+                            <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
+                                <span style="font-size: 12px; font-weight: bold; color: #64748b; margin-right: 5px;">Filtrar Status:</span>
+                                <button type="button" class="chip-filtro-chamada active" id="chipFiltro_TODOS" onclick="filtrarStatusChamada('TODOS')">📋 Todos (<span id="cntFiltro_TODOS">0</span>)</button>
+                                <button type="button" class="chip-filtro-chamada" id="chipFiltro_PRESENTE" onclick="filtrarStatusChamada('PRESENTE')">🟢 Presentes (<span id="cntFiltro_PRESENTE">0</span>)</button>
+                                <button type="button" class="chip-filtro-chamada" id="chipFiltro_FALTA" onclick="filtrarStatusChamada('FALTA')">🔴 Faltas (<span id="cntFiltro_FALTA">0</span>)</button>
+                                <button type="button" class="chip-filtro-chamada" id="chipFiltro_JUSTIFICADO" onclick="filtrarStatusChamada('JUSTIFICADO')">🟡 Justificados (<span id="cntFiltro_JUSTIFICADO">0</span>)</button>
+                            </div>
+                        </div>
+
                         <div class="table-container">
                             <table>
                                 <thead>
