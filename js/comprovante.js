@@ -678,45 +678,133 @@ function abrirWhatsAppWeb(telefone, crismando) {
     alert(`✅ Comprovante baixado!\n📱 WhatsApp Web aberto para ${crismando.nome}\n\n👉 Anexe o arquivo baixado na conversa`);
 }
 
-// Manter funções originais para compatibilidade
-function baixarComprovantePNG(dadosComprovante) {
-    baixarComprovanteMobile(dadosComprovante);
+// ─────────────────────────────────────────────
+// COMPROVANTE CONSOLIDADO EM TEXTO (MULTI-MÊS / MULTI-ANO)
+// ─────────────────────────────────────────────
+
+function gerarTextoComprovanteConsolidado(crismando, listaMesesAnos, valorTotal) {
+    const versiculo = versiculos[Math.floor(Math.random() * versiculos.length)];
+    const codigoAutenticacao = gerarCodigoUnico();
+    
+    const mesesFormatados = listaMesesAnos.map(m => `${m.mes}/${m.ano}`).join(', ');
+    const valorStr = parseFloat(valorTotal).toFixed(2).replace('.', ',');
+
+    const dadosComprovante = {
+        crismando,
+        mes: mesesFormatados,
+        ano: listaMesesAnos[0]?.ano || new Date().getFullYear(),
+        valor: valorTotal,
+        dataAtual: new Date().toLocaleDateString('pt-BR'),
+        versiculo,
+        codigoAutenticacao
+    };
+
+    registrarCodigoAutenticacao(dadosComprovante, codigoAutenticacao);
+
+    const mensagemTexto = `Olá, ${crismando.nome}. Confirmamos o recebimento da sua contribuição da Crisma referente ao(s) mês(es): *${mesesFormatados}* (Valor Total: R$ ${valorStr}). Código de verificação: \`${codigoAutenticacao}\`. Seu histórico atualizado já consta em nosso sistema. Obrigado!\n\n"${versiculo}"\nQue Deus abençoe você e sua caminhada! 🙏`;
+
+    return {
+        dadosComprovante,
+        mensagemTexto
+    };
 }
 
-function gerarComprovante() {
-    const crismandoId = document.getElementById('selectCrismando').value;
-    const mes = document.getElementById('mesPagamento').value;
-    const valor = parseFloat(document.getElementById('valorPago').value) || 0;
-    const ano = document.getElementById('anoPagamento').value;
+function exibirModalComprovanteTexto(textoMsg, crismando) {
+    const comprovanteContent = document.getElementById('comprovanteContent');
+    const modal = document.getElementById('modalComprovante');
     
-    if (!crismandoId || !mes || valor <= 0) {
-        alert('Por favor, preencha todos os campos antes de gerar o comprovante.');
+    if (!comprovanteContent || !modal) return;
+
+    window.textoComprovanteAtual = textoMsg;
+    if (crismando) window.crismandoComprovanteAtual = crismando;
+
+    const html = `
+        <div style="text-align: left; font-family: Arial, sans-serif;">
+            <h3 style="color: #2c3e50; margin-bottom: 15px; text-align: center;">🧾 Comprovante de Pagamento (Texto)</h3>
+            <div style="background: #f8f9fa; border: 1px solid #ddd; border-radius: 8px; padding: 15px; white-space: pre-wrap; font-size: 14px; line-height: 1.5; color: #333;">${textoMsg}</div>
+            
+            <div style="margin-top: 15px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                <button class="btn btn-info" onclick="copiarTextoComprovante()">📋 Copiar Texto</button>
+                <button class="btn btn-warning" onclick="abrirWhatsAppComTexto()">📱 Enviar no WhatsApp</button>
+            </div>
+        </div>
+    `;
+
+    comprovanteContent.innerHTML = html;
+    modal.style.display = 'block';
+}
+
+function copiarTextoComprovante() {
+    if (!window.textoComprovanteAtual) {
+        alert("Nenhum texto de comprovante disponível.");
         return;
     }
-    
-    const dadosComprovante = gerarComprovanteAutomatico(crismandoId, mes, valor,ano);
-    
-    criarTemplateComprovante(dadosComprovante).then(imgData => {
-        const comprovanteHTML = `
-            <div style="text-align: center;">
-                <img src="${imgData}" style="max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 8px;">
-            </div>
-        `;
-        
-        const comprovanteContent = document.getElementById('comprovanteContent');
-        const modal = document.getElementById('modalComprovante');
-        
-        if (comprovanteContent && modal) {
-            comprovanteContent.innerHTML = comprovanteHTML;
-            modal.style.display = 'block';
-            
-            window.dadosComprovanteAtual = dadosComprovante;
-            window.imagemComprovanteAtual = imgData;
-        }
+    navigator.clipboard.writeText(window.textoComprovanteAtual).then(() => {
+        alert("✅ Texto do comprovante copiado para a área de transferência!");
+    }).catch(err => {
+        alert("Erro ao copiar texto: " + err);
     });
 }
 
-// Função principal para envio (mantida para compatibilidade)
+function abrirWhatsAppComTexto() {
+    const crismando = window.crismandoComprovanteAtual || window.dadosComprovanteAtual?.crismando;
+    const texto = window.textoComprovanteAtual;
+    
+    if (!texto) {
+        alert("Nenhum comprovante gerado para envio.");
+        return;
+    }
+
+    let telefone = crismando?.telefone ? crismando.telefone.replace(/\D/g, '') : '';
+    if (!telefone) {
+        alert("Telefone do crismando não cadastrado ou inválido.");
+        return;
+    }
+
+    const telefoneFormatado = telefone.startsWith('55') ? telefone : '55' + telefone;
+    const url = `https://wa.me/${telefoneFormatado}?text=${encodeURIComponent(texto)}`;
+    window.open(url, '_blank');
+}
+
+function gerarComprovante() {
+    const crismandoId = parseInt(document.getElementById('crismandoIdSelecionado')?.value);
+    const checkboxesMarcados = Array.from(
+        document.querySelectorAll('#containerGradeMeses input[type="checkbox"]:checked:not(:disabled)')
+    );
+    const valorUnitario = parseFloat(document.getElementById('valorUnitario')?.value) || 0;
+
+    if (!crismandoId) {
+        alert('Por favor, selecione um crismando no campo de busca.');
+        return;
+    }
+
+    if (checkboxesMarcados.length === 0) {
+        alert('Por favor, selecione pelo menos um mês na grade.');
+        return;
+    }
+
+    const crismando = crismandos.find(c => c.id === crismandoId);
+    if (!crismando) {
+        alert('Crismando não encontrado.');
+        return;
+    }
+
+    const listaMesesAnos = checkboxesMarcados.map(chk => ({
+        mes: chk.getAttribute('data-mes'),
+        ano: parseInt(chk.getAttribute('data-ano'))
+    }));
+
+    const valorTotal = valorUnitario * checkboxesMarcados.length;
+    const resultado = gerarTextoComprovanteConsolidado(crismando, listaMesesAnos, valorTotal);
+    
+    exibirModalComprovanteTexto(resultado.mensagemTexto, crismando);
+}
+
 function enviarWhatsApp() {
-    enviarComprovanteAutomatico();
+    if (window.textoComprovanteAtual) {
+        abrirWhatsAppComTexto();
+    } else {
+        gerarComprovante();
+        abrirWhatsAppComTexto();
+    }
 }

@@ -296,3 +296,376 @@ tr:hover {
   font-size: 14px;
 }
 
+/* Estilos para Seleção Multi-mês e Multi-ano */
+.meses-container {
+    background: #ffffff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 15px;
+    margin-top: 10px;
+}
+
+.meses-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.mes-checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #f8f9fa;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    padding: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    user-select: none;
+    transition: all 0.2s ease;
+}
+
+.mes-checkbox-label:hover {
+    background: #e9ecef;
+    border-color: #adb5bd;
+}
+
+.mes-checkbox-label.checked {
+    background: #e3f2fd;
+    border-color: #3498db;
+    color: #1976d2;
+    font-weight: bold;
+}
+
+.mes-checkbox-label.pago {
+    background: #e8f5e9;
+    border-color: #a5d6a7;
+    color: #2e7d32;
+    opacity: 0.8;
+    cursor: not-allowed;
+}
+
+.mes-checkbox-label input[type="checkbox"] {
+    width: auto;
+    cursor: pointer;
+}
+
+.badge-pago {
+    font-size: 10px;
+    background: #2e7d32;
+    color: white;
+    padding: 2px 5px;
+    border-radius: 4px;
+    margin-left: auto;
+}
+
+.ano-seletor-container {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+}
+
+.grid-anual-matriz {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.card-mes-anual {
+    border-radius: 8px;
+    padding: 10px;
+    text-align: center;
+    font-size: 12px;
+    border: 1px solid #ddd;
+    background: #ffffff;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.card-mes-anual.pago {
+    background: #e8f5e9;
+    border-color: #81c784;
+    color: #1b5e20;
+}
+
+.card-mes-anual.pendente {
+    background: #ffebee;
+    border-color: #ef9a9a;
+    color: #b71c1c;
+}
+
+/* ====================================================================
+   SISTEMA DE ABAS (TAB NAVIGATION) - MOBILE & TABLET FIRST
+   ==================================================================== */
+.tab-navigation {
+    display: flex;
+    justify-content: space-around;
+    background: #ffffff;
+    border-bottom: 2px solid #e2e8f0;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    margin-bottom: 20px;
+    border-radius: 8px;
+    overflow-x: auto;
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.tab-btn {
+    flex: 1;
+    padding: 14px 16px;
+    border: none;
+    background: transparent;
+    font-size: 14px;
+    font-weight: 600;
+    color: #64748b;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-bottom: 3px solid transparent;
+}
+
+.tab-btn:hover {
+    color: #1e3a8a;
+    background: #f8fafc;
+}
+
+.tab-btn.active {
+    color: #1e3a8a;
+    border-bottom-color: #1e3a8a;
+    background: #eff6ff;
+}
+
+.tab-pane {
+    display: none;
+    animation: fadeIn 0.3s ease;
+}
+
+.tab-pane.active-pane {
+    display: block;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 768px) {
+    .tab-btn {
+        padding: 10px 12px;
+        font-size: 12px;
+        flex-direction: column;
+        gap: 4px;
+    }
+}
+
+/* ====================================================================
+   BANNER FLUTUANTE DE DISPARO EM SEGUNDO PLANO (BACKGROUND QUEUE)
+   ==================================================================== */
+.banner-disparo-bg {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-left: 5px solid #27ae60;
+    border-radius: 12px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+    padding: 14px 18px;
+    z-index: 9999;
+    max-width: 450px;
+    width: calc(100% - 40px);
+    animation: slideUpBanner 0.4s ease-out;
+}
+
+@keyframes slideUpBanner {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.spinner-disparo {
+    display: inline-block;
+    animation: pulseDisparo 1.5s infinite;
+}
+
+@keyframes pulseDisparo {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.2); }
+    100% { transform: scale(1); }
+}
+
+/* ====================================================================
+   GRADE DE MESES DO CICLO CATEQUÉTICO - TOUCH TILES (MOBILE/TABLET FIRST)
+   ==================================================================== */
+.month-tile-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 12px;
+    margin-top: 10px;
+}
+
+.month-tile {
+    padding: 14px 10px;
+    border: 2px solid #cbd5e1;
+    border-radius: 12px;
+    background: #ffffff;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.2s ease;
+    min-height: 70px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    user-select: none;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+}
+
+.month-tile:hover:not(.paid) {
+    border-color: #3b82f6;
+    background: #f0f9ff;
+    transform: translateY(-2px);
+}
+
+.month-tile.selected {
+    background: #dcfce7 !important;
+    border-color: #22c55e !important;
+    box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.3) !important;
+}
+
+.month-tile.paid {
+    background: #fee2e2 !important;
+    border-color: #ef4444 !important;
+    cursor: not-allowed;
+    opacity: 0.8;
+}
+
+.month-tile-name {
+    font-weight: 700;
+    font-size: 14px;
+    color: #1e293b;
+}
+
+.month-tile-year {
+    font-size: 12px;
+    color: #64748b;
+}
+
+.month-tile-status {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-top: 2px;
+}
+
+.badge-aberto {
+    color: #475569;
+    background: #f1f5f9;
+}
+
+.badge-pago {
+    color: #991b1b;
+    background: #fecaca;
+}
+
+@media (max-width: 480px) {
+    .month-tile-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+    }
+
+    .month-tile {
+        padding: 10px 6px;
+        min-height: 62px;
+    }
+
+    .month-tile-name {
+        font-size: 13px;
+    }
+}
+
+/* ====================================================================
+   CHIPS DE FILTRO E BOTÕES PÍLULA DE CHAMADA (MOBILE FIRST)
+   ==================================================================== */
+.chip-filtro-chamada {
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.chip-filtro-chamada:hover {
+    background: #e2e8f0;
+}
+
+.chip-filtro-chamada.active {
+    background: #1e293b;
+    color: #ffffff;
+    border-color: #1e293b;
+}
+
+.radio-group-chamada {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.radio-pill-item {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    user-select: none;
+    transition: all 0.2s ease;
+}
+
+.radio-pill-item input {
+    display: none;
+}
+
+.radio-pill-item.pill-presente.active {
+    background: #dcfce7;
+    color: #15803d;
+    border-color: #22c55e;
+}
+
+.radio-pill-item.pill-falta.active {
+    background: #fee2e2;
+    color: #b91c1c;
+    border-color: #ef4444;
+}
+
+.radio-pill-item.pill-justificado.active {
+    background: #fef3c7;
+    color: #b45309;
+    border-color: #f59e0b;
+}
+
+
