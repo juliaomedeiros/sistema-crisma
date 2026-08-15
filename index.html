@@ -38,7 +38,10 @@
                     <span>📊</span> Gestão de Caixa
                 </button>
                 <button class="tab-btn" id="btnTabEvolution" onclick="alternarAba('tabEvolution')">
-                    <span>⚙️</span> Inadimplência & Whats
+                    <span>⚙️</span> Servidor WhatsApp
+                </button>
+                <button class="tab-btn" id="btnTabAvisosLote" onclick="alternarAba('tabAvisosLote')">
+                    <span>📢</span> Avisos em Lote
                 </button>
             </div>
 
@@ -439,7 +442,7 @@
             </div>
 
             <!-- =========================================================
-                 ABA 5: CONFIGURAÇÕES DA TURMA, EVOLUTION GO E INADIMPLÊNCIA
+                 ABA 5: CONFIGURAÇÕES DA TURMA E SERVIDOR WHATSAPP
                  ========================================================= -->
             <div id="tabEvolution" class="tab-pane">
                 <!-- Painel de Configurações da Turma e Ciclo Catequético -->
@@ -498,16 +501,120 @@
                 </div>
 
                 <div class="section">
-                    <h3>📱 Conexão Evolution Go & Disparo de Cobranças</h3>
+                    <h3>📱 Conexão WhatsApp & Disparo de Cobranças</h3>
                     <div style="background: #e3f2fd; border: 1px solid #90caf9; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-                        <h4 style="color: #1976d2; margin-bottom: 8px;">📡 Status do Servidor WhatsApp (Evolution Go)</h4>
+                        <h4 style="color: #1976d2; margin-bottom: 8px;">📡 Status do Servidor WhatsApp</h4>
                         <p style="font-size: 13px; color: #333; margin: 0;">
-                            O sistema de mensagens automáticas está atrelado ao servidor Evolution Go. Quando ativado, os lembretes de mensalidade, comprovantes e avisos de faltas são disparados em segundo plano.
+                            O sistema de mensagens automáticas está atrelado ao servidor WhatsApp. Quando ativado, os lembretes de mensalidade, comprovantes e avisos de faltas são disparados em segundo plano.
                         </p>
                     </div>
                     <button class="btn btn-warning" onclick="atualizarIndicadorInadimplencia(); alert('Painel de cobrança atualizado com sucesso!');">
                         📱 Atualizar Lembretes de Inadimplência
                     </button>
+                </div>
+            </div>
+
+            <!-- =========================================================
+                 ABA 6: DISPARO DE AVISOS EM LOTE VIA WHATSAPP
+                 ========================================================= -->
+            <div id="tabAvisosLote" class="tab-pane">
+                <div class="section">
+                    <h3>📢 Disparo de Avisos & Lembretes em Lote</h3>
+                    <p style="font-size: 13.5px; color: #555; margin-bottom: 15px;">
+                        Escreva um aviso para ser enviado individualmente a todos os crismandos cadastrados. O sistema personaliza a mensagem com o nome de cada destinatário e aplica o protocolo Anti-Ban automaticamente.
+                    </p>
+
+                    <!-- Banner de Proteção Anti-Ban -->
+                    <div style="background: #e8f5e9; border: 1px solid #a5d6a7; padding: 14px 18px; border-radius: 8px; margin-bottom: 20px; color: #1b5e20; font-size: 13.5px;">
+                        <strong>🛡️ Proteção Anti-Ban Meta Ativada:</strong> Os envios contam com personalização dinâmica por <code>{nome}</code> (criando mensagens com hash único), intervalo randômico de 15s a 45s entre entregas e pausa automática de 2 minutos a cada 10 mensagens disparadas.
+                    </div>
+
+                    <div class="form-grid" style="grid-template-columns: 1fr 1fr; gap: 20px;">
+                        <!-- Coluna 1: Redação da Mensagem -->
+                        <div>
+                            <div class="form-group">
+                                <label for="txtMensagemAvisoLote"><strong>Compor Mensagem do Aviso:</strong></label>
+                                
+                                <div style="margin: 8px 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                                    <span style="font-size: 12px; color: #666;">Inserir variável:</span>
+                                    <button type="button" class="btn btn-sm btn-light" style="padding: 3px 8px; font-size: 12px; cursor: pointer;" onclick="inserirVariavelAviso('{nome}')">+ {nome}</button>
+                                    <button type="button" class="btn btn-sm btn-light" style="padding: 3px 8px; font-size: 12px; cursor: pointer;" onclick="inserirVariavelAviso('{telefone}')">+ {telefone}</button>
+                                    <button type="button" class="btn btn-sm btn-light" style="padding: 3px 8px; font-size: 12px; cursor: pointer;" onclick="inserirVariavelAviso('{valor}')">+ {valor}</button>
+                                </div>
+
+                                <textarea id="txtMensagemAvisoLote" rows="7" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc; font-family: inherit; font-size: 14px;" oninput="atualizarPreviewAviso()" placeholder="Digite seu aviso aqui...">Paz e bem, {nome}! 🌿
+
+Passando para lembrar do nosso próximo encontro da Crisma de Adultos no Santuário Mãe Rainha.
+
+Sua presença é fundamental na nossa caminhada de fé!</textarea>
+                            </div>
+
+                            <!-- Preview do Card WhatsApp -->
+                            <div style="margin-top: 15px;">
+                                <label><strong>Pré-visualização (Visão do Crismando):</strong></label>
+                                <div id="cardPreviewWhatsApp" style="background: #efeae2; padding: 15px; border-radius: 8px; border: 1px solid #d1d7db; margin-top: 5px;">
+                                    <div style="background: #ffffff; padding: 10px 14px; border-radius: 8px; max-width: 90%; font-size: 13.5px; line-height: 1.4; color: #111b21; position: relative; box-shadow: 0 1px 0.5px rgba(11,20,26,.13);">
+                                        <div id="previewTextoAviso" style="white-space: pre-wrap;"></div>
+                                        <div style="text-align: right; font-size: 10px; color: #667781; margin-top: 4px;">
+                                            12:00 ✓✓
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Coluna 2: Destinatários e Seleção -->
+                        <div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <label><strong>Destinatários (<span id="qtdDestinatariosAviso">0</span>):</strong></label>
+                                <div>
+                                    <button type="button" class="btn btn-sm" style="padding: 4px 8px; font-size: 12px;" onclick="marcarTodosDestinatariosAviso(true)">Marcar Todos</button>
+                                    <button type="button" class="btn btn-sm" style="padding: 4px 8px; font-size: 12px;" onclick="marcarTodosDestinatariosAviso(false)">Desmarcar Todos</button>
+                                </div>
+                            </div>
+
+                            <div id="containerListaDestinatarios" style="max-height: 320px; overflow-y: auto; border: 1px solid #ddd; border-radius: 6px; padding: 10px; background: #fafafa;">
+                                <!-- Preenchido dinamicamente via JS -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Botões de Ação do Disparo -->
+                    <div style="margin-top: 20px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                        <button class="btn btn-success" id="btnIniciarDisparoAvisos" onclick="iniciarDisparoAvisosEmLote()" style="padding: 10px 20px; font-size: 15px;">
+                            🚀 Iniciar Disparo em Lote
+                        </button>
+                        <button class="btn btn-warning" id="btnPausarDisparoAvisos" onclick="pausarDisparoAvisos()" style="display: none; padding: 10px 20px; font-size: 15px;">
+                            ⏸️ Pausar Disparo
+                        </button>
+                        <button class="btn btn-danger" id="btnCancelarDisparoAvisos" onclick="cancelarDisparoAvisos()" style="display: none; padding: 10px 20px; font-size: 15px;">
+                            🛑 Cancelar Disparo
+                        </button>
+                    </div>
+
+                    <!-- Painel de Progresso em Tempo Real -->
+                    <div id="containerProgressoAvisos" style="display: none; margin-top: 25px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 18px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <strong style="color: #2c3e50; font-size: 15px;" id="tituloProgressoAvisos">📡 Progresso do Disparo de Avisos</strong>
+                            <span style="font-weight: bold; color: #27ae60;" id="porcentagemProgressoAvisos">0%</span>
+                        </div>
+
+                        <div style="background: #e9ecef; border-radius: 6px; height: 16px; overflow: hidden; margin-bottom: 12px;">
+                            <div id="barraProgressoAvisos" style="background: linear-gradient(90deg, #27ae60, #2ecc71); height: 100%; width: 0%; transition: width 0.3s ease;"></div>
+                        </div>
+
+                        <div style="display: flex; gap: 20px; flex-wrap: wrap; font-size: 13px; color: #495057; margin-bottom: 12px;" id="metricasProgressoAvisos">
+                            <div>📋 Total: <strong id="metricTotalAvisos">0</strong></div>
+                            <div>✅ Sucessos: <strong id="metricSucessosAvisos" style="color: #27ae60;">0</strong></div>
+                            <div>⚠️ Falhas: <strong id="metricFalhasAvisos" style="color: #e74c3c;">0</strong></div>
+                            <div>⏳ Próximo envio em: <strong id="metricTimerAvisos" style="color: #2980b9;">-</strong></div>
+                        </div>
+
+                        <div style="margin-top: 10px;">
+                            <label style="font-size: 12px; color: #666;"><strong>Log de Entregas:</strong></label>
+                            <div id="logDisparoAvisos" style="background: #1e1e1e; color: #00ff66; font-family: monospace; font-size: 12px; padding: 10px; border-radius: 6px; height: 120px; overflow-y: auto; white-space: pre-wrap;"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
 

@@ -124,7 +124,16 @@ async function criarNovoEncontro() {
 
   } catch (error) {
     console.error("Erro ao criar encontro:", error);
-    alert(`❌ Erro ao criar encontro: ${error.message || error}`);
+    if (error && (error.code === "42501" || (error.message && error.message.includes("row-level security")))) {
+      alert(
+        "⚠️ Permissão negada no banco de dados (RLS)!\n\n" +
+        "A tabela 'encontros' do Supabase exige configuração de permissão (Row Level Security).\n" +
+        "Por favor, acesse o SQL Editor no Supabase e execute:\n\n" +
+        "ALTER TABLE encontros DISABLE ROW LEVEL SECURITY;"
+      );
+    } else {
+      alert(`❌ Erro ao criar encontro: ${error.message || error}`);
+    }
   }
 }
 
@@ -352,7 +361,16 @@ async function salvarChamadaEncontro() {
 
   } catch (error) {
     console.error("Erro ao salvar chamada:", error);
-    alert(`❌ Erro ao salvar chamada: ${error.message || error}`);
+    if (error && (error.code === "42501" || (error.message && error.message.includes("row-level security")))) {
+      alert(
+        "⚠️ Permissão negada no banco de dados (RLS)!\n\n" +
+        "A tabela 'presencas' do Supabase exige configuração de permissão (Row Level Security).\n" +
+        "Por favor, acesse o SQL Editor no Supabase e execute:\n\n" +
+        "ALTER TABLE presencas DISABLE ROW LEVEL SECURITY;"
+      );
+    } else {
+      alert(`❌ Erro ao salvar chamada: ${error.message || error}`);
+    }
   }
 }
 
@@ -369,7 +387,7 @@ function exibirModalNotificacaoFaltas(faltosos, dataEncontroStr) {
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:5px;">
           <strong>👤 ${c.nome} (Total: ${totalF} faltas)</strong>
           <button id="btnEnvFalta_${index}" class="btn btn-warning" style="padding: 4px 10px; font-size: 12px;" onclick="enviarAvisoFaltaIndividual(this, '${c.nome}', '${c.telefone || ''}', '${dataEncontroStr}', ${totalF})">
-            📱 Enviar Aviso via Evolution Go
+            📱 Enviar Aviso via WhatsApp
           </button>
         </div>
         <div style="background: #f8f9fa; padding: 8px; border-radius: 5px; font-size: 12px; margin-top: 5px; color: #555;">${msg}</div>
@@ -385,13 +403,13 @@ function exibirModalNotificacaoFaltas(faltosos, dataEncontroStr) {
     <div class="modal-content" style="max-width: 650px;">
       <span class="close" onclick="this.parentElement.parentElement.remove()">&times;</span>
       <h3 style="color: #c0392b; margin-bottom: 10px; text-align: center;">📱 Notificações de Ausência (${faltosos.length})</h3>
-      <p style="font-size: 13px; color: #555; margin-bottom: 15px;">Os crismandos abaixo receberam registro de falta neste encontro. Dispare os avisos via WhatsApp Evolution Go:</p>
+      <p style="font-size: 13px; color: #555; margin-bottom: 15px;">Os crismandos abaixo receberam registro de falta neste encontro. Dispare os avisos via WhatsApp:</p>
       
       <div style="max-height: 350px; overflow-y: auto; margin-bottom: 15px; padding-right: 5px;">${htmlTextos}</div>
       
       <div style="display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
         <button class="btn btn-success" style="flex: 1;" onclick="dispararAvisosFaltaEmLote('${dataEncontroStr}')">
-          🚀 Disparar Todos Avisos de Falta via Evolution Go (Background)
+          🚀 Disparar Todos Avisos de Falta via WhatsApp (Background)
         </button>
         <button class="btn btn-secondary" style="background:#6c757d; color:white;" onclick="this.parentElement.parentElement.parentElement.remove()">
           Fechar
@@ -402,7 +420,7 @@ function exibirModalNotificacaoFaltas(faltosos, dataEncontroStr) {
   document.body.appendChild(modal);
 }
 
-// Disparo individual de aviso de falta via Evolution Go REST API
+// Disparo individual de aviso de falta via WhatsApp REST API
 async function enviarAvisoFaltaIndividual(btn, nome, telefone, dataEncontroStr, totalFaltas) {
   let tel = telefone ? telefone.replace(/\D/g, "") : "";
   if (!tel) {
