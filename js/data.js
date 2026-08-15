@@ -486,7 +486,7 @@ async function registrarPagamento() {
         } else {
           alert(
             `✅ Pagamento de ${crismandoExiste.nome} (R$ ${valorTotalGeral.toFixed(2).replace(".", ",")}) registrado com sucesso no banco!\n\n` +
-            `⚠️ Contudo, a mensagem no WhatsApp não pôde ser entregue no momento. Verifique a conexão com o Evolution Go.`
+            `⚠️ Contudo, a mensagem no WhatsApp não pôde ser entregue no momento. Verifique a conexão com o WhatsApp.`
           );
         }
       } else {
@@ -510,7 +510,7 @@ async function registrarPagamento() {
         `✅ PAGAMENTO REGISTRADO COM SUCESSO!\n\n` +
         `👤 Crismando: ${crismandoExiste.nome}\n` +
         `💰 Total Quitado: R$ ${valorTotalGeral.toFixed(2).replace(".", ",")}\n` +
-        `🧾 O recibo foi adicionado à fila do encontro e SERÁ ENVIADO EM LOTE POSTERIORMENTE (no final do dia via Evolution Go).`
+        `🧾 O recibo foi adicionado à fila do encontro e SERÁ ENVIADO EM LOTE POSTERIORMENTE (no final do dia via WhatsApp).`
       );
     }
 

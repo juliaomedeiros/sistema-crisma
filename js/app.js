@@ -126,7 +126,8 @@ function alternarAba(tabId) {
     tabCrismandos: "btnTabCrismandos",
     tabFrequencia: "btnTabFrequencia",
     tabFinanceiro: "btnTabFinanceiro",
-    tabEvolution: "btnTabEvolution"
+    tabEvolution: "btnTabEvolution",
+    tabAvisosLote: "btnTabAvisosLote"
   };
 
   const btnId = mapaBotoes[tabId];
@@ -139,6 +140,13 @@ function alternarAba(tabId) {
 
   if (tabId === "tabCrismandos") {
     renderizarTabelaGeralCrismandos();
+  } else if (tabId === "tabAvisosLote") {
+    if (typeof carregarDestinatariosAviso === "function") {
+      carregarDestinatariosAviso();
+    }
+    if (typeof atualizarPreviewAviso === "function") {
+      atualizarPreviewAviso();
+    }
   }
 }
 

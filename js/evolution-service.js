@@ -140,7 +140,7 @@ function atualizarIndicadorInadimplencia() {
             <strong>${devedores.length} crismando(s) com contribuição pendente em ${mesAtualNome}/${anoAtualNum}</strong>
           </div>
           <button class="btn btn-warning" style="padding: 6px 14px; font-size: 13px;" onclick="abrirPainelCobrancaInadimplentes('${mesAtualNome}', ${anoAtualNum})">
-            📱 Gerar Lembretes de Cobrança (Evolution Go)
+            📱 Gerar Lembretes de Cobrança (WhatsApp)
           </button>
         </div>
       `;
@@ -193,7 +193,7 @@ function abrirPainelCobrancaInadimplentes(mesFiltro, anoFiltro) {
   modal.innerHTML = `
     <div class="modal-content" style="max-width: 650px;">
       <span class="close" onclick="fecharModalCobranca()">&times;</span>
-      <h3 style="color: #2c3e50; margin-bottom: 10px; text-align: center;">📱 Lembretes de Cobrança (Evolution Go) — ${mesFiltro}/${anoFiltro}</h3>
+      <h3 style="color: #2c3e50; margin-bottom: 10px; text-align: center;">📱 Lembretes de Cobrança (WhatsApp) — ${mesFiltro}/${anoFiltro}</h3>
       <p style="font-size: 13px; color: #555; margin-bottom: 15px; text-align: center;">
         Abaixo estão exibidos <strong>apenas os ${devedores.length} crismando(s) inadimplentes</strong>. Desmarque quem não deve receber.
       </p>
@@ -440,7 +440,7 @@ async function dispararRecibosPendentesDoDia() {
   }
 
   const qtd = recibosPendentesEncontro.length;
-  if (!confirm(`Deseja disparar os ${qtd} recibo(s) acumulados do encontro?\n\nOs recibos serão enviados via Evolution Go em SEGUNDO PLANO com mecanismo Anti-Ban.`)) {
+  if (!confirm(`Deseja disparar os ${qtd} recibo(s) acumulados do encontro?\n\nOs recibos serão enviados via WhatsApp em SEGUNDO PLANO com mecanismo Anti-Ban.`)) {
     return;
   }
 
@@ -505,5 +505,252 @@ async function dispararRecibosPendentesDoDia() {
   removerBannerDisparo();
 
   alert(`🏁 Disparo dos recibos do encontro concluído!\n\n✅ Sucessos: ${enviadosOk}\n⚠️ Falhas/Sem telefone: ${falhas}`);
+}
+
+// =========================================================================
+// SISTEMA DE DISPARO DE AVISOS E LEMBRETES EM LOTE VIA WHATSAPP (ANTI-BAN)
+// =========================================================================
+
+window.disparoAvisosEmAndamento = false;
+window.disparoAvisosPausado = false;
+window.cancelarDisparoAvisosFlag = false;
+
+// Insere variável clicada pelo usuário na caixa de mensagem
+function inserirVariavelAviso(variavel) {
+  const textarea = document.getElementById("txtMensagemAvisoLote");
+  if (!textarea) return;
+
+  const start = textarea.selectionStart || textarea.value.length;
+  const end = textarea.selectionEnd || textarea.value.length;
+  const original = textarea.value;
+
+  textarea.value = original.substring(0, start) + variavel + original.substring(end);
+  textarea.focus();
+  textarea.selectionStart = textarea.selectionEnd = start + variavel.length;
+
+  atualizarPreviewAviso();
+}
+
+// Atualiza o card de preview visual do WhatsApp
+function atualizarPreviewAviso() {
+  const textarea = document.getElementById("txtMensagemAvisoLote");
+  const previewDiv = document.getElementById("previewTextoAviso");
+  if (!textarea || !previewDiv) return;
+
+  let texto = textarea.value || "Digite a mensagem acima para visualizar...";
+  
+  // Exemplo de crismando fictício para preview
+  texto = texto.replace(/\{nome\}/g, "João Silva")
+               .replace(/\{telefone\}/g, "(81) 98765-4321")
+               .replace(/\{valor\}/g, "R$ 10,00");
+
+  previewDiv.innerText = texto;
+}
+
+// Carrega lista de crismandos como destinatários marcáveis
+function carregarDestinatariosAviso() {
+  const container = document.getElementById("containerListaDestinatarios");
+  const spanQtd = document.getElementById("qtdDestinatariosAviso");
+  if (!container) return;
+
+  container.innerHTML = "";
+
+  if (!crismandos || crismandos.length === 0) {
+    container.innerHTML = `<div style="color: #888; text-align: center; font-size: 13px; padding: 15px;">Nenhum crismando cadastrado.</div>`;
+    if (spanQtd) spanQtd.innerText = "0";
+    return;
+  }
+
+  let totalComWhats = 0;
+
+  crismandos.forEach((c) => {
+    const temTel = c.telefone && c.telefone.replace(/\D/g, "").length >= 8;
+    if (temTel) totalComWhats++;
+
+    const divItem = document.createElement("div");
+    divItem.style.cssText = "display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-bottom: 1px solid #eee; font-size: 13px;";
+    
+    divItem.innerHTML = `
+      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin: 0; width: 100%;">
+        <input type="checkbox" class="chk-destinatario-aviso" value="${c.id}" ${temTel ? "checked" : "disabled"}>
+        <span style="font-weight: 500; ${temTel ? "" : "color: #aaa;"}">${c.nome}</span>
+      </label>
+      <span style="font-size: 11px; ${temTel ? "color: #27ae60;" : "color: #e74c3c;"}">
+        ${temTel ? c.telefone : "Sem telefone"}
+      </span>
+    `;
+    container.appendChild(divItem);
+  });
+
+  if (spanQtd) spanQtd.innerText = totalComWhats.toString();
+}
+
+function marcarTodosDestinatariosAviso(marcar) {
+  const checkboxes = document.querySelectorAll(".chk-destinatario-aviso:not([disabled])");
+  checkboxes.forEach(chk => chk.checked = marcar);
+}
+
+// Inicia o processo de envio em lote com o protocolo Anti-Ban Meta
+async function iniciarDisparoAvisosEmLote() {
+  if (window.disparoAvisosEmAndamento) {
+    alert("⚠️ Já existe um disparo de avisos em andamento!");
+    return;
+  }
+
+  const textarea = document.getElementById("txtMensagemAvisoLote");
+  const templateMensagem = textarea ? textarea.value.trim() : "";
+
+  if (!templateMensagem) {
+    alert("⚠️ Por favor, digite a mensagem do aviso antes de enviar.");
+    return;
+  }
+
+  const checkboxes = document.querySelectorAll(".chk-destinatario-aviso:checked");
+  const idsSelecionados = Array.from(checkboxes).map(chk => chk.value);
+
+  if (idsSelecionados.length === 0) {
+    alert("⚠️ Nenhum crismando foi selecionado para receber o aviso.");
+    return;
+  }
+
+  const listaCrismandosAlvo = crismandos.filter(c => idsSelecionados.includes(c.id.toString()));
+
+  if (!confirm(`Confirmar o envio do aviso para ${listaCrismandosAlvo.length} crismando(s)?\n\n🛡️ Proteção Anti-Ban Meta ativada (delays randômicos e pausas por lote).`)) {
+    return;
+  }
+
+  window.disparoAvisosEmAndamento = true;
+  window.disparoAvisosPausado = false;
+  window.cancelarDisparoAvisosFlag = false;
+
+  document.getElementById("btnIniciarDisparoAvisos").style.display = "none";
+  document.getElementById("btnPausarDisparoAvisos").style.display = "inline-block";
+  document.getElementById("btnCancelarDisparoAvisos").style.display = "inline-block";
+  document.getElementById("containerProgressoAvisos").style.display = "block";
+
+  const logBox = document.getElementById("logDisparoAvisos");
+  if (logBox) logBox.innerHTML = `[${new Date().toLocaleTimeString()}] 🚀 Iniciando disparo de avisos em lote...\n`;
+
+  let sucessos = 0;
+  let falhas = 0;
+  const total = listaCrismandosAlvo.length;
+
+  document.getElementById("metricTotalAvisos").innerText = total;
+  document.getElementById("metricSucessosAvisos").innerText = "0";
+  document.getElementById("metricFalhasAvisos").innerText = "0";
+
+  for (let i = 0; i < total; i++) {
+    if (window.cancelarDisparoAvisosFlag) {
+      if (logBox) logBox.innerHTML += `[${new Date().toLocaleTimeString()}] 🛑 Disparo cancelado pelo usuário.\n`;
+      break;
+    }
+
+    while (window.disparoAvisosPausado) {
+      document.getElementById("tituloProgressoAvisos").innerText = "⏸️ Disparo Pausado";
+      document.getElementById("metricTimerAvisos").innerText = "Pausado";
+      await new Promise(r => setTimeout(r, 1000));
+      if (window.cancelarDisparoAvisosFlag) break;
+    }
+
+    if (window.cancelarDisparoAvisosFlag) break;
+    document.getElementById("tituloProgressoAvisos").innerText = "📡 Disparando Avisos via WhatsApp...";
+
+    const crismando = listaCrismandosAlvo[i];
+    const tel = crismando.telefone;
+    const nome = crismando.nome;
+    const valor = (crismando.valor_mensal || 10.00).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+    const msgPersonalizada = templateMensagem
+      .replace(/\{nome\}/g, nome)
+      .replace(/\{telefone\}/g, tel || "")
+      .replace(/\{valor\}/g, valor);
+
+    const pct = Math.round(((i) / total) * 100);
+    document.getElementById("porcentagemProgressoAvisos").innerText = `${pct}%`;
+    document.getElementById("barraProgressoAvisos").style.width = `${pct}%`;
+
+    if (window.auth && typeof window.auth.renovarSessao === "function") {
+      window.auth.renovarSessao();
+    }
+
+    if (logBox) {
+      logBox.innerHTML += `[${new Date().toLocaleTimeString()}] 📱 Enviando (${i + 1}/${total}) para ${nome}... `;
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    let ok = false;
+    if (tel) {
+      ok = await enviarTextoEvolutionGo(tel, msgPersonalizada);
+    }
+
+    if (ok) {
+      sucessos++;
+      document.getElementById("metricSucessosAvisos").innerText = sucessos;
+      if (logBox) logBox.innerHTML += `✅ OK!\n`;
+    } else {
+      falhas++;
+      document.getElementById("metricFalhasAvisos").innerText = falhas;
+      if (logBox) logBox.innerHTML += `❌ FALHA!\n`;
+    }
+
+    if (i < total - 1 && !window.cancelarDisparoAvisosFlag) {
+      if ((i + 1) % 10 === 0) {
+        const tempoPausaLote = 120;
+        if (logBox) {
+          logBox.innerHTML += `[${new Date().toLocaleTimeString()}] 🛡️ Pausa de descanso Anti-Ban Meta (10 mensagens). Aguardando ${tempoPausaLote}s...\n`;
+          logBox.scrollTop = logBox.scrollHeight;
+        }
+
+        for (let s = tempoPausaLote; s > 0; s--) {
+          if (window.cancelarDisparoAvisosFlag) break;
+          document.getElementById("metricTimerAvisos").innerText = `${s}s (Pausa de Lote)`;
+          await new Promise(r => setTimeout(r, 1000));
+        }
+      } else {
+        const delaySegundos = Math.floor(Math.random() * (45 - 15 + 1)) + 15;
+        for (let s = delaySegundos; s > 0; s--) {
+          if (window.cancelarDisparoAvisosFlag) break;
+          document.getElementById("metricTimerAvisos").innerText = `${s}s`;
+          await new Promise(r => setTimeout(r, 1000));
+        }
+      }
+    }
+  }
+
+  const pctFinal = 100;
+  document.getElementById("porcentagemProgressoAvisos").innerText = `${pctFinal}%`;
+  document.getElementById("barraProgressoAvisos").style.width = `${pctFinal}%`;
+  document.getElementById("metricTimerAvisos").innerText = "Concluído";
+  document.getElementById("tituloProgressoAvisos").innerText = "🏁 Disparo Concluído!";
+
+  window.disparoAvisosEmAndamento = false;
+  window.disparoAvisosPausado = false;
+  window.cancelarDisparoAvisosFlag = false;
+
+  document.getElementById("btnIniciarDisparoAvisos").style.display = "inline-block";
+  document.getElementById("btnPausarDisparoAvisos").style.display = "none";
+  document.getElementById("btnCancelarDisparoAvisos").style.display = "none";
+
+  if (logBox) logBox.innerHTML += `[${new Date().toLocaleTimeString()}] 🏁 Lote finalizado! ✅ Sucessos: ${sucessos} | ⚠️ Falhas: ${falhas}\n`;
+
+  alert(`🏁 Disparo de avisos concluído!\n\n✅ Enviados com sucesso: ${sucessos}\n⚠️ Falhas ou sem telefone: ${falhas}`);
+}
+
+function pausarDisparoAvisos() {
+  const btn = document.getElementById("btnPausarDisparoAvisos");
+  if (window.disparoAvisosPausado) {
+    window.disparoAvisosPausado = false;
+    if (btn) btn.innerText = "⏸️ Pausar Disparo";
+  } else {
+    window.disparoAvisosPausado = true;
+    if (btn) btn.innerText = "▶️ Retomar Disparo";
+  }
+}
+
+function cancelarDisparoAvisos() {
+  if (confirm("Deseja realmente interromper e cancelar o disparo dos avisos restantes?")) {
+    window.cancelarDisparoAvisosFlag = true;
+    window.disparoAvisosPausado = false;
+  }
 }
 
