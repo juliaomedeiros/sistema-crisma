@@ -21,9 +21,9 @@ class AuthSystem {
     // Inicializar Supabase antes do login
     async initializeSupabaseForAuth() {
         try {
-            if (typeof ENV === 'undefined') {
-                throw new Error('Variáveis de ambiente não carregadas');
-            }
+            // Se o env.js não estiver presente (ex: no GitHub Pages sem env.js), usa fallback das credenciais públicas do Supabase
+            const supabaseUrl = (typeof ENV !== 'undefined' && ENV.SUPABASE_URL) ? ENV.SUPABASE_URL : 'https://yqqpugheqqknpbetysme.supabase.co';
+            const supabaseAnonKey = (typeof ENV !== 'undefined' && ENV.SUPABASE_ANON_KEY) ? ENV.SUPABASE_ANON_KEY : 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlxcXB1Z2hlcXFrbnBiZXR5c21lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAxOTkwNTUsImV4cCI6MjA2NTc3NTA1NX0.Q89vTdLgodaIsuLiIB6JijJPuzyrcRNPoTwUJ_gUQV4';
 
             if (typeof window.supabase === 'undefined') {
                 throw new Error('Biblioteca Supabase não carregada');
@@ -31,8 +31,8 @@ class AuthSystem {
 
             if (!window.supabaseClient) {
                 window.supabaseClient = window.supabase.createClient(
-                    ENV.SUPABASE_URL,
-                    ENV.SUPABASE_ANON_KEY
+                    supabaseUrl,
+                    supabaseAnonKey
                 );
                 console.log('✅ Cliente Supabase criado para autenticação');
             }
