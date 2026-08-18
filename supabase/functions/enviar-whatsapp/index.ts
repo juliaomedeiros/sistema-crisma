@@ -52,9 +52,10 @@ serve(async (req) => {
       }
     };
 
-    const targetUrl = `${EVOLUTION_URL.replace(/\/$/, "")}/send/text`;
+    const cleanBaseUrl = EVOLUTION_URL.replace(/\/$/, "");
+    let targetUrl = `${cleanBaseUrl}/send/text`;
 
-    const evoResponse = await fetch(targetUrl, {
+    let evoResponse = await fetch(targetUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -62,6 +63,32 @@ serve(async (req) => {
       },
       body: JSON.stringify(payload),
     });
+
+    // Fallback 1: /message/sendText
+    if (evoResponse.status === 404) {
+      targetUrl = `${cleanBaseUrl}/message/sendText`;
+      evoResponse = await fetch(targetUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": EVOLUTION_API_KEY,
+        },
+        body: JSON.stringify(payload),
+      });
+    }
+
+    // Fallback 2: /message/sendText/{instance}
+    if (evoResponse.status === 404) {
+      targetUrl = `${cleanBaseUrl}/message/sendText/${EVOLUTION_INSTANCE}`;
+      evoResponse = await fetch(targetUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": EVOLUTION_API_KEY,
+        },
+        body: JSON.stringify(payload),
+      });
+    }
 
     const evoData = await evoResponse.text();
 
