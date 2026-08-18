@@ -6,30 +6,9 @@ function initializeSupabase() {
     try {
         console.log('🔄 Tentando inicializar Supabase...');
 
-        // Verificar se ENV está disponível
-        if (typeof ENV === 'undefined') {
-            console.error('❌ ENV não definido - arquivo env.js não foi carregado');
-            return null;
-        }
-
-        console.log('✅ ENV encontrado:', {
-            hasUrl: !!ENV.SUPABASE_URL,
-            hasKey: !!ENV.SUPABASE_ANON_KEY,
-            urlLength: ENV.SUPABASE_URL ? ENV.SUPABASE_URL.length : 0,
-            keyLength: ENV.SUPABASE_ANON_KEY ? ENV.SUPABASE_ANON_KEY.length : 0
-        });
-
-        // Configuração do Supabase
-        const SUPABASE_URL = ENV.SUPABASE_URL;
-        const SUPABASE_ANON_KEY = ENV.SUPABASE_ANON_KEY;
-
-        // Verificar se as variáveis foram carregadas
-        if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-            console.error('❌ Erro: Variáveis de ambiente não configuradas');
-            console.log('URL:', SUPABASE_URL);
-            console.log('KEY:', SUPABASE_ANON_KEY ? 'Presente' : 'Ausente');
-            return null;
-        }
+        // Configuração do Supabase (com fallback das chaves públicas padrão)
+        const SUPABASE_URL = (typeof ENV !== 'undefined' && ENV.SUPABASE_URL) ? ENV.SUPABASE_URL : 'https://yqqpugheqqknpbetysme.supabase.co';
+        const SUPABASE_ANON_KEY = (typeof ENV !== 'undefined' && ENV.SUPABASE_ANON_KEY) ? ENV.SUPABASE_ANON_KEY : 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlxcXB1Z2hlcXFrbnBiZXR5c21lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAxOTkwNTUsImV4cCI6MjA2NTc3NTA1NX0.Q89vTdLgodaIsuLiIB6JijJPuzyrcRNPoTwUJ_gUQV4';
 
         // Verificar se a biblioteca Supabase está carregada
         if (typeof window.supabase === 'undefined') {
