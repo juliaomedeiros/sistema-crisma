@@ -13,10 +13,6 @@ document.addEventListener('DOMContentLoaded', async function() {
   try {
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    if (typeof ENV === 'undefined') {
-      throw new Error('Variáveis de ambiente não carregadas. Recarregue a página.');
-    }
-
     const supabaseInstance = initializeSupabase();
     if (!supabaseInstance) {
       throw new Error('Falha na inicialização do Supabase - verifique as credenciais');
