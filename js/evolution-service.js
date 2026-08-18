@@ -18,10 +18,12 @@ async function enviarTextoEvolutionGo(telefone, mensagem) {
       return false;
     }
 
+    const supabaseInst = (typeof getSupabaseClient === 'function' ? getSupabaseClient() : null) || window.supabaseClient;
+
     // 1. Tenta envio prioritário via Supabase Edge Function (Chave 100% segura no backend)
-    if (typeof supabase !== "undefined" && supabase.functions) {
+    if (supabaseInst && supabaseInst.functions) {
       try {
-        const { data, error } = await supabase.functions.invoke("enviar-whatsapp", {
+        const { data, error } = await supabaseInst.functions.invoke("enviar-whatsapp", {
           body: { telefone: numLimpo, mensagem: mensagem }
         });
 
@@ -38,9 +40,10 @@ async function enviarTextoEvolutionGo(telefone, mensagem) {
     }
 
     // 2. Fallback Direto (caso a Edge Function ainda não esteja implantada)
-    const baseUrl = ENV?.EVOLUTION_GO_URL || ENV?.EVOLUTION_API_URL;
-    const apiKey = ENV?.EVOLUTION_GO_API_KEY || ENV?.EVOLUTION_API_KEY;
-    const instanceName = ENV?.EVOLUTION_GO_INSTANCE || ENV?.EVOLUTION_INSTANCE_NAME || "crisma-mae-rainha";
+    const envObj = typeof ENV !== 'undefined' ? ENV : null;
+    const baseUrl = envObj?.EVOLUTION_GO_URL || envObj?.EVOLUTION_API_URL;
+    const apiKey = envObj?.EVOLUTION_GO_API_KEY || envObj?.EVOLUTION_API_KEY;
+    const instanceName = envObj?.EVOLUTION_GO_INSTANCE || envObj?.EVOLUTION_INSTANCE_NAME || "crisma-mae-rainha";
 
     if (!baseUrl || !apiKey || apiKey === "SUA_API_KEY_AQUI") {
       console.warn("⚠️ Evolution Go não configurado no env.js nem na Edge Function.");
