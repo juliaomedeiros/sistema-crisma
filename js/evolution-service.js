@@ -9,22 +9,45 @@ window.detalhesDisparoAtual = {
   pausaRestante: 0
 };
 
-// Envio de Texto via API REST do Evolution Go (compatível com Golang v0.7.x e Node API v1/v2)
+// Envio de Texto via Supabase Edge Function (Proxy Seguro) com Fallback
 async function enviarTextoEvolutionGo(telefone, mensagem) {
   try {
+    const numLimpo = telefone.replace(/\D/g, "");
+    if (!numLimpo) {
+      console.warn("⚠️ Telefone inválido para envio.");
+      return false;
+    }
+
+    // 1. Tenta envio prioritário via Supabase Edge Function (Chave 100% segura no backend)
+    if (typeof supabase !== "undefined" && supabase.functions) {
+      try {
+        const { data, error } = await supabase.functions.invoke("enviar-whatsapp", {
+          body: { telefone: numLimpo, mensagem: mensagem }
+        });
+
+        if (!error && data) {
+          console.log(`✅ [Edge Function] Mensagem enviada com sucesso para ${numLimpo}`);
+          return true;
+        }
+        if (error) {
+          console.warn("⚠️ [Edge Function] Erro retornado pela função. Tentando modo direto...", error);
+        }
+      } catch (fnErr) {
+        console.warn("⚠️ [Edge Function] Exceção ao chamar Supabase Function. Tentando modo direto...", fnErr);
+      }
+    }
+
+    // 2. Fallback Direto (caso a Edge Function ainda não esteja implantada)
     const baseUrl = ENV?.EVOLUTION_GO_URL || ENV?.EVOLUTION_API_URL;
     const apiKey = ENV?.EVOLUTION_GO_API_KEY || ENV?.EVOLUTION_API_KEY;
     const instanceName = ENV?.EVOLUTION_GO_INSTANCE || ENV?.EVOLUTION_INSTANCE_NAME || "crisma-mae-rainha";
 
     if (!baseUrl || !apiKey || apiKey === "SUA_API_KEY_AQUI") {
-      console.warn("⚠️ Configurações do Evolution Go não preenchidas no env.js");
+      console.warn("⚠️ Evolution Go não configurado no env.js nem na Edge Function.");
       return false;
     }
 
-    const numLimpo = telefone.replace(/\D/g, "");
     const numFormatado = numLimpo.startsWith("55") ? numLimpo : "55" + numLimpo;
-
-    // Rota oficial do Evolution Go em Golang v0.7.x (/send/text)
     const urlPrimary = `${baseUrl.replace(/\/$/, "")}/send/text`;
 
     const payload = {
@@ -50,36 +73,8 @@ async function enviarTextoEvolutionGo(telefone, mensagem) {
       body: JSON.stringify(payload)
     });
 
-    // Fallback 1: Rota /message/sendText
-    if (response.status === 404) {
-      console.warn("⚠️ Endpoint /send/text retornou 404. Tentando rota /message/sendText...");
-      const urlFallback1 = `${baseUrl.replace(/\/$/, "")}/message/sendText`;
-      response = await fetch(urlFallback1, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "apikey": apiKey
-        },
-        body: JSON.stringify(payload)
-      });
-    }
-
-    // Fallback 2: Rota legada Node /message/sendText/{instance}
-    if (response.status === 404) {
-      console.warn("⚠️ Endpoint /message/sendText retornou 404. Tentando rota /message/sendText/" + instanceName);
-      const urlFallback2 = `${baseUrl.replace(/\/$/, "")}/message/sendText/${instanceName}`;
-      response = await fetch(urlFallback2, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "apikey": apiKey
-        },
-        body: JSON.stringify(payload)
-      });
-    }
-
     if (response.ok || response.status === 200 || response.status === 201) {
-      console.log(`✅ Mensagem enviada com sucesso para ${numFormatado} via Evolution Go`);
+      console.log(`✅ [Modo Direto] Mensagem enviada com sucesso para ${numFormatado}`);
       return true;
     } else {
       const errTxt = await response.text();
