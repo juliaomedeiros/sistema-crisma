@@ -48,24 +48,27 @@ function calcularMapaFaltas() {
   mapaFaltasAcumuladas = {};
 
   presencas.forEach(p => {
-    if (p.status === "FALTA") {
-      const cId = p.crismando_id;
+    const statusUpper = String(p.status || "").trim().toUpperCase();
+    if (statusUpper === "FALTA") {
+      const cId = String(p.crismando_id);
       mapaFaltasAcumuladas[cId] = (mapaFaltasAcumuladas[cId] || 0) + 1;
     }
   });
 }
 
 function obterBadgeFaltas(qtdFaltas) {
+  const textoFalta = qtdFaltas === 1 ? "1 falta" : `${qtdFaltas} faltas`;
+
   if (qtdFaltas >= 7) {
-    return `<span style="background: #212529; color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold;">⛔ Desligado (${qtdFaltas} faltas)</span>`;
+    return `<span style="background: #212529; color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold;">⛔ Desligado (${textoFalta})</span>`;
   } else if (qtdFaltas === 6) {
-    return `<span style="background: #e74c3c; color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; animation: blink 1.5s infinite;">🔴 Alerta Crítico (6 faltas)</span>`;
+    return `<span style="background: #e74c3c; color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; animation: blink 1.5s infinite;">🔴 Alerta Crítico (${textoFalta})</span>`;
   } else if (qtdFaltas === 5) {
-    return `<span style="background: #e67e22; color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold;">🟠 Atenção (5 faltas)</span>`;
+    return `<span style="background: #e67e22; color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold;">🟠 Atenção (${textoFalta})</span>`;
   } else if (qtdFaltas >= 3) {
-    return `<span style="background: #f1c40f; color: #333; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold;">🟡 Aviso (3-4 faltas)</span>`;
+    return `<span style="background: #f1c40f; color: #333; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold;">🟡 Aviso (${textoFalta})</span>`;
   } else {
-    return `<span style="background: #27ae60; color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px;">✅ OK (${qtdFaltas} faltas)</span>`;
+    return `<span style="background: #27ae60; color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px;">✅ OK (${textoFalta})</span>`;
   }
 }
 
@@ -229,7 +232,7 @@ function atualizarTabelaChamada() {
   }
 
   // Filtrar presenças salvas para este encontro específico
-  const presencasDoEncontro = presencas.filter(p => p.encontro_id === encontroId);
+  const presencasDoEncontro = presencas.filter(p => String(p.encontro_id) === String(encontroId));
 
   const termo = window.termoBuscaChamada || "";
   const filtroStatus = window.filtroStatusChamada || "TODOS";
@@ -240,7 +243,7 @@ function atualizarTabelaChamada() {
     if (!bateNome) return false;
 
     // Filtro por status selecionado
-    const pSalva = presencasDoEncontro.find(p => p.crismando_id === c.id);
+    const pSalva = presencasDoEncontro.find(p => String(p.crismando_id) === String(c.id));
     const radioElem = document.querySelector(`input[name="status_presenca_${c.id}"]:checked`);
     const statusAtual = radioElem ? radioElem.value : (pSalva ? pSalva.status : "PRESENTE");
 
@@ -255,11 +258,11 @@ function atualizarTabelaChamada() {
   }
 
   crismandosExibidos.forEach(c => {
-    const qtdFaltas = mapaFaltasAcumuladas[c.id] || 0;
+    const qtdFaltas = mapaFaltasAcumuladas[String(c.id)] || 0;
     const badgeHTML = obterBadgeFaltas(qtdFaltas);
 
     // Buscar presença já salva se existir
-    const pSalva = presencasDoEncontro.find(p => p.crismando_id === c.id);
+    const pSalva = presencasDoEncontro.find(p => String(p.crismando_id) === String(c.id));
     const statusSalvo = pSalva ? pSalva.status : "PRESENTE";
 
     const tr = document.createElement("tr");
