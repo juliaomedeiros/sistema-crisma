@@ -495,22 +495,20 @@ async function registrarPagamento() {
           `⚠️ Crismando não possui número de telefone cadastrado para o envio do recibo.`
         );
       }
-    } else {
-      recibosPendentesEncontro.push({
-        crismando: crismandoExiste,
-        mesesAnos: listaMesesAnos,
-        valorTotal: valorTotalGeral,
-        mensagemTexto: resultadoComprovante.mensagemTexto,
-        dataHora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      // Enfileira de forma centralizada no Supabase (Multi-usuário em tempo real)
+      await enfileirarMensagemWhatsApp({
+        crismando_id: crismandoExiste.id,
+        nome_destinatario: crismandoExiste.nome,
+        telefone: crismandoExiste.telefone || "",
+        tipo: "recibo",
+        mensagem: resultadoComprovante.mensagemTexto
       });
-
-      salvarRecibosPendentesLocal();
 
       alert(
         `✅ PAGAMENTO REGISTRADO COM SUCESSO!\n\n` +
         `👤 Crismando: ${crismandoExiste.nome}\n` +
         `💰 Total Quitado: R$ ${valorTotalGeral.toFixed(2).replace(".", ",")}\n` +
-        `🧾 O recibo foi adicionado à fila do encontro e SERÁ ENVIADO EM LOTE POSTERIORMENTE (no final do dia via WhatsApp).`
+        `🧾 O recibo foi adicionado à fila unificada do encontro no Supabase (visível para todos os coordenadores).`
       );
     }
 
@@ -527,12 +525,72 @@ async function registrarPagamento() {
   }
 }
 
+// Salva na fila centralizada do Supabase
+async function enfileirarMensagemWhatsApp(dados) {
+  try {
+    const supabaseClient = (typeof getSupabaseClient === 'function' ? getSupabaseClient() : null) || window.supabaseClient;
+    if (!supabaseClient) throw new Error("Cliente Supabase não inicializado");
+
+    const usuarioAtual = (window.auth && window.auth.currentUser) ? window.auth.currentUser.nome : "Coordenador";
+
+    const registro = {
+      crismando_id: dados.crismando_id || null,
+      nome_destinatario: dados.nome_destinatario,
+      telefone: dados.telefone ? dados.telefone.replace(/\D/g, "") : "",
+      tipo: dados.tipo || "aviso",
+      mensagem: dados.mensagem,
+      status: "pendente",
+      criado_por: usuarioAtual
+    };
+
+    const { data, error } = await supabaseClient
+      .from("fila_mensagens_whatsapp")
+      .insert([registro])
+      .select();
+
+    if (error) throw error;
+
+    await carregarRecibosPendentesLocal();
+    return data[0];
+  } catch (err) {
+    console.error("Erro ao enfileirar mensagem no Supabase:", err);
+    // Fallback local se o banco falhar
+    recibosPendentesEncontro.push(dados);
+    salvarRecibosPendentesLocal();
+  }
+}
+
 function salvarRecibosPendentesLocal() {
   localStorage.setItem("crisma_recibos_pendentes", JSON.stringify(recibosPendentesEncontro));
   atualizarContadorRecibosPendentes();
 }
 
-function carregarRecibosPendentesLocal() {
+async function carregarRecibosPendentesLocal() {
+  try {
+    const supabaseClient = (typeof getSupabaseClient === 'function' ? getSupabaseClient() : null) || window.supabaseClient;
+    if (supabaseClient) {
+      const { data, error } = await supabaseClient
+        .from("fila_mensagens_whatsapp")
+        .select("*")
+        .eq("status", "pendente")
+        .order("created_at", { ascending: true });
+
+      if (!error && data) {
+        recibosPendentesEncontro = data.map(item => ({
+          id: item.id,
+          crismando: { id: item.crismando_id, nome: item.nome_destinatario, telefone: item.telefone },
+          mensagemTexto: item.mensagem,
+          tipo: item.tipo,
+          criado_por: item.criado_por
+        }));
+        atualizarContadorRecibosPendentes();
+        return;
+      }
+    }
+  } catch (e) {
+    console.warn("⚠️ Não foi possível carregar fila global do Supabase. Usando fila local.");
+  }
+
   const dados = localStorage.getItem("crisma_recibos_pendentes");
   if (dados) {
     try {

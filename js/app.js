@@ -37,6 +37,9 @@ document.addEventListener('DOMContentLoaded', async function() {
       if (typeof atualizarIndicadorInadimplencia === 'function') {
         atualizarIndicadorInadimplencia();
       }
+      if (typeof carregarRecibosPendentesLocal === 'function') {
+        await carregarRecibosPendentesLocal();
+      }
       if (typeof inicializarMóduloExcel === 'function') {
         inicializarMóduloExcel();
       }

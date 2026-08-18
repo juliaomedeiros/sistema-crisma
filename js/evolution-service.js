@@ -445,8 +445,12 @@ async function dispararRecibosPendentesDoDia() {
   window.disparoEmAndamento = true;
   renderizarBannerDisparoBackground();
 
+  const supabaseClient = (typeof getSupabaseClient === 'function' ? getSupabaseClient() : null) || window.supabaseClient;
   let enviadosOk = 0;
   let falhas = 0;
+
+  // Recarregar do Supabase para garantir a fila mais atual
+  await carregarRecibosPendentesLocal();
   const listaFila = [...recibosPendentesEncontro];
 
   for (let i = 0; i < listaFila.length; i++) {
@@ -460,31 +464,42 @@ async function dispararRecibosPendentesDoDia() {
     }
 
     const item = listaFila[i];
-    const nome = item.crismando.nome;
-    const tel = item.crismando.telefone;
+    const nome = item.crismando ? item.crismando.nome : "Crismando";
+    const tel = item.crismando ? item.crismando.telefone : "";
 
     atualizarBannerDisparo(i + 1, listaFila.length, nome, 0);
 
-    if (tel) {
-      const ok = await enviarTextoEvolutionGo(tel, item.mensagemTexto);
-      if (ok) {
-        enviadosOk++;
-        // Remover item enviado da fila de pendentes
-        const idx = recibosPendentesEncontro.indexOf(item);
-        if (idx > -1) recibosPendentesEncontro.splice(idx, 1);
-      } else {
-        falhas++;
-      }
-    } else {
-      falhas++;
-      console.warn(`Crismando ${nome} não tem telefone.`);
+    // Marcar como processando no Supabase
+    if (supabaseClient && item.id) {
+      await supabaseClient.from("fila_mensagens_whatsapp").update({ status: "processando" }).eq("id", item.id);
     }
 
-    if (typeof salvarRecibosPendentesLocal === "function") {
-      salvarRecibosPendentesLocal();
-    } else {
-      atualizarContadorRecibosPendentes();
+    let ok = false;
+    if (tel) {
+      ok = await enviarTextoEvolutionGo(tel, item.mensagemTexto);
     }
+
+    if (ok) {
+      enviadosOk++;
+      if (supabaseClient && item.id) {
+        await supabaseClient.from("fila_mensagens_whatsapp").update({ 
+          status: "enviado", 
+          enviado_em: new Date().toISOString() 
+        }).eq("id", item.id);
+      }
+      const idx = recibosPendentesEncontro.indexOf(item);
+      if (idx > -1) recibosPendentesEncontro.splice(idx, 1);
+    } else {
+      falhas++;
+      if (supabaseClient && item.id) {
+        await supabaseClient.from("fila_mensagens_whatsapp").update({ 
+          status: "falha", 
+          erro_log: tel ? "Erro ao disparar via Evolution Go" : "Sem telefone cadastrado" 
+        }).eq("id", item.id);
+      }
+    }
+
+    atualizarContadorRecibosPendentes();
 
     if (i < listaFila.length - 1 && window.disparoEmAndamento) {
       const delaySegundos = Math.floor(Math.random() * (45 - 15 + 1)) + 15;
@@ -503,6 +518,7 @@ async function dispararRecibosPendentesDoDia() {
   removerBannerDisparo();
 
   alert(`🏁 Disparo dos recibos do encontro concluído!\n\n✅ Sucessos: ${enviadosOk}\n⚠️ Falhas/Sem telefone: ${falhas}`);
+  await carregarRecibosPendentesLocal();
 }
 
 // =========================================================================
