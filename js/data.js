@@ -495,6 +495,7 @@ async function registrarPagamento() {
           `⚠️ Crismando não possui número de telefone cadastrado para o envio do recibo.`
         );
       }
+    } else {
       // Enfileira de forma centralizada no Supabase (Multi-usuário em tempo real)
       await enfileirarMensagemWhatsApp({
         crismando_id: crismandoExiste.id,
@@ -508,7 +509,7 @@ async function registrarPagamento() {
         `✅ PAGAMENTO REGISTRADO COM SUCESSO!\n\n` +
         `👤 Crismando: ${crismandoExiste.nome}\n` +
         `💰 Total Quitado: R$ ${valorTotalGeral.toFixed(2).replace(".", ",")}\n` +
-        `🧾 O recibo foi adicionado à fila unificada do encontro no Supabase (visível para todos os coordenadores).`
+        `🧾 O recibo foi adicionado à fila unificada para envio posterior.`
       );
     }
 
