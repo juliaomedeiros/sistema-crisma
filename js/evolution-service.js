@@ -28,11 +28,21 @@ async function enviarTextoEvolutionGo(telefone, mensagem) {
         });
 
         if (!error && data) {
-          console.log(`✅ [Edge Function] Mensagem enviada com sucesso para ${numLimpo}`);
-          return true;
+          if (data.ok) {
+            console.log(`✅ [Edge Function] Mensagem enviada com sucesso para ${numLimpo}`);
+            return { ok: true };
+          } else {
+            console.warn(`⚠️ [Edge Function] Recusa de envio para ${numLimpo}:`, data.error || data);
+            return {
+              ok: false,
+              isError463: Boolean(data.isError463 || data.errorCode === 463),
+              errorCode: data.errorCode || 500,
+              mensagemErro: data.error || "Recusa de envio via WhatsApp"
+            };
+          }
         }
         if (error) {
-          console.warn("⚠️ [Edge Function] Erro retornado pela função. Tentando modo direto...", error);
+          console.warn("⚠️ [Edge Function] Erro HTTP na comunicação com Edge Function:", error);
         }
       } catch (fnErr) {
         console.warn("⚠️ [Edge Function] Exceção ao chamar Supabase Function. Tentando modo direto...", fnErr);
@@ -448,6 +458,7 @@ async function dispararRecibosPendentesDoDia() {
   const supabaseClient = (typeof getSupabaseClient === 'function' ? getSupabaseClient() : null) || window.supabaseClient;
   let enviadosOk = 0;
   let falhas = 0;
+  let reagendados463 = 0;
 
   // Recarregar do Supabase para garantir a fila mais atual
   await carregarRecibosPendentesLocal();
@@ -474,12 +485,17 @@ async function dispararRecibosPendentesDoDia() {
       await supabaseClient.from("fila_mensagens_whatsapp").update({ status: "processando" }).eq("id", item.id);
     }
 
-    let ok = false;
+    let resultadoEnvio = { ok: false };
     if (tel) {
-      ok = await enviarTextoEvolutionGo(tel, item.mensagemTexto);
+      const res = await enviarTextoEvolutionGo(tel, item.mensagemTexto);
+      if (typeof res === 'boolean') {
+        resultadoEnvio = { ok: res };
+      } else if (res && typeof res === 'object') {
+        resultadoEnvio = res;
+      }
     }
 
-    if (ok) {
+    if (resultadoEnvio.ok) {
       enviadosOk++;
       if (supabaseClient && item.id) {
         await supabaseClient.from("fila_mensagens_whatsapp").update({ 
@@ -489,12 +505,27 @@ async function dispararRecibosPendentesDoDia() {
       }
       const idx = recibosPendentesEncontro.indexOf(item);
       if (idx > -1) recibosPendentesEncontro.splice(idx, 1);
+    } else if (resultadoEnvio.isError463) {
+      // WhatsApp recusou envio imediato: agendar para reenvio automático em 2 horas
+      const dataReagendada = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+      console.warn(`⏳ Mensagem para ${tel} reagendada para reenvio automático em 2h (${dataReagendada})`);
+      
+      if (supabaseClient && item.id) {
+        const tentativasAtuais = (item.tentativas || 0) + 1;
+        await supabaseClient.from("fila_mensagens_whatsapp").update({ 
+          status: "reagendado_463",
+          agendado_para: dataReagendada,
+          tentativas: tentativasAtuais,
+          erro_log: "WhatsApp recusou envio imediato. Reagendado automaticamente para 2 horas."
+        }).eq("id", item.id);
+      }
+      reagendados463++;
     } else {
       falhas++;
       if (supabaseClient && item.id) {
         await supabaseClient.from("fila_mensagens_whatsapp").update({ 
           status: "falha", 
-          erro_log: tel ? "Erro ao disparar via Evolution Go" : "Sem telefone cadastrado" 
+          erro_log: tel ? (resultadoEnvio.mensagemErro || "Erro ao disparar via Evolution Go") : "Sem telefone cadastrado" 
         }).eq("id", item.id);
       }
     }
@@ -517,7 +548,14 @@ async function dispararRecibosPendentesDoDia() {
   window.disparoEmAndamento = false;
   removerBannerDisparo();
 
-  alert(`🏁 Disparo dos recibos do encontro concluído!\n\n✅ Sucessos: ${enviadosOk}\n⚠️ Falhas/Sem telefone: ${falhas}`);
+  let msgResultado = `🏁 Disparo dos recibos do encontro concluído!\n\n✅ Enviados com sucesso: ${enviadosOk}`;
+  if (reagendados463 > 0) {
+    msgResultado += `\n⏳ Pausados temporariamente pelo WhatsApp (Reenvio automático em 2h): ${reagendados463}`;
+  }
+  if (falhas > 0) {
+    msgResultado += `\n❌ Não foi possível entregar: ${falhas}`;
+  }
+  alert(msgResultado);
   await carregarRecibosPendentesLocal();
 }
 
@@ -767,4 +805,66 @@ function cancelarDisparoAvisos() {
     window.disparoAvisosPausado = false;
   }
 }
+
+// Check automático client-side para reprocessar mensagens reagendadas caso o usuário esteja com o sistema aberto
+async function checarEProcessarFilaReagendadaClientSide() {
+  try {
+    const supabaseClient = (typeof getSupabaseClient === 'function' ? getSupabaseClient() : null) || window.supabaseClient;
+    if (!supabaseClient) return;
+
+    const agora = new Date().toISOString();
+    const { data: pendentes, error } = await supabaseClient
+      .from("fila_mensagens_whatsapp")
+      .select("*")
+      .eq("status", "reagendado_463")
+      .lte("agendado_para", agora);
+
+    if (error || !pendentes || pendentes.length === 0) return;
+
+    console.log(`⏳ [Auto-Reenvio 2h] Encontradas ${pendentes.length} mensagens reagendadas para envio...`);
+
+    for (const item of pendentes) {
+      if (!item.telefone || !item.mensagem_texto) continue;
+
+      await supabaseClient.from("fila_mensagens_whatsapp").update({ status: "processando" }).eq("id", item.id);
+
+      const res = await enviarTextoEvolutionGo(item.telefone, item.mensagem_texto);
+      const isOk = typeof res === 'boolean' ? res : (res && res.ok);
+
+      if (isOk) {
+        console.log(`✅ [Auto-Reenvio 2h] Mensagem entregue com sucesso para ${item.telefone}`);
+        await supabaseClient.from("fila_mensagens_whatsapp").update({
+          status: "enviado",
+          enviado_em: new Date().toISOString(),
+          erro_log: null
+        }).eq("id", item.id);
+      } else {
+        const tentativas = (item.tentativas || 1) + 1;
+        if (tentativas >= 2) {
+          console.warn(`❌ [Auto-Reenvio 2h] Falha definitiva para ${item.telefone} após ${tentativas} tentativas.`);
+          await supabaseClient.from("fila_mensagens_whatsapp").update({
+            status: "falha_definitiva",
+            tentativas: tentativas,
+            erro_log: "Não foi possível entregar após reenvio automático. Verifique o número no WhatsApp."
+          }).eq("id", item.id);
+        } else {
+          const proximaData = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+          await supabaseClient.from("fila_mensagens_whatsapp").update({
+            status: "reagendado_463",
+            agendado_para: proximaData,
+            tentativas: tentativas,
+            erro_log: "WhatsApp recusou envio. Reagendado novamente para 2h."
+          }).eq("id", item.id);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("⚠️ Erro na checagem da fila reagendada:", err);
+  }
+}
+
+// Iniciar verificação da fila a cada 10 minutos no cliente
+setInterval(checarEProcessarFilaReagendadaClientSide, 10 * 60 * 1000);
+setTimeout(checarEProcessarFilaReagendadaClientSide, 5000);
+
 
