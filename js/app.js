@@ -57,9 +57,13 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
 
   window.onclick = function(event) {
-    const modal = document.getElementById('modalComprovante');
-    if (event.target == modal) {
-      modal.style.display = 'none';
+    const modalComprovante = document.getElementById('modalComprovante');
+    if (event.target == modalComprovante) {
+      modalComprovante.style.display = 'none';
+    }
+    const modalEditar = document.getElementById('modalEditarCrismando');
+    if (event.target == modalEditar) {
+      modalEditar.style.display = 'none';
     }
   };
 });
@@ -182,6 +186,7 @@ function renderizarTabelaGeralCrismandos(filtro = "") {
       <td>${c.telefone || "-"}</td>
       <td style="color:#27ae60; font-weight:bold;">R$ ${parseFloat(c.valor_mensal || 10).toFixed(2).replace(".", ",")}</td>
       <td>
+        <button class="btn btn-info" style="padding: 4px 8px; font-size: 11px; margin-right: 5px;" onclick="abrirModalEditarCrismando(${c.id})">✏️ Editar</button>
         <button class="btn btn-warning" style="padding: 4px 8px; font-size: 11px;" onclick="deletarCrismando(${c.id})">🗑️ Excluir</button>
       </td>
     `;
@@ -189,8 +194,13 @@ function renderizarTabelaGeralCrismandos(filtro = "") {
   });
 }
 
+function deletarCrismando(id) {
+  removerCrismando(id);
+}
+
 function filtrarTabelaGeralCrismandos() {
   const input = document.getElementById("buscaTabelaCrismandos");
   const termo = input ? input.value : "";
   renderizarTabelaGeralCrismandos(termo);
 }
+

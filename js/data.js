@@ -718,10 +718,79 @@ async function removerCrismando(id) {
     atualizarTabela();
     atualizarSelectCrismandos();
     atualizarEstatisticas();
+    if (typeof renderizarTabelaGeralCrismandos === "function") {
+      renderizarTabelaGeralCrismandos();
+    }
     alert("Crismando removido com sucesso!");
   } catch (error) {
     console.error("Erro ao remover crismando:", error);
     alert("Erro ao remover crismando. Tente novamente.");
+  }
+}
+
+function abrirModalEditarCrismando(id) {
+  const crismando = crismandos.find((c) => c.id == id);
+  if (!crismando) {
+    alert("Crismando não encontrado.");
+    return;
+  }
+
+  document.getElementById("editCrismandoId").value = crismando.id;
+  document.getElementById("editNome").value = crismando.nome || "";
+  document.getElementById("editTelefone").value = crismando.telefone || "";
+  const valPadrao = window.configuracoesSistema?.valor_mensal_padrao || 10.00;
+  document.getElementById("editValorMensal").value = parseFloat(crismando.valor_mensal || valPadrao).toFixed(2);
+
+  const modal = document.getElementById("modalEditarCrismando");
+  if (modal) modal.style.display = "block";
+}
+
+function fecharModalEditarCrismando() {
+  const modal = document.getElementById("modalEditarCrismando");
+  if (modal) modal.style.display = "none";
+}
+
+async function salvarEdicaoCrismando() {
+  const id = document.getElementById("editCrismandoId").value;
+  const nome = document.getElementById("editNome").value.trim();
+  const telefone = document.getElementById("editTelefone").value.trim();
+  const valor_mensal = parseFloat(document.getElementById("editValorMensal").value) || window.configuracoesSistema?.valor_mensal_padrao || 10.00;
+
+  if (!id) return;
+  if (!nome) {
+    alert("Por favor, informe o nome do crismando.");
+    return;
+  }
+
+  try {
+    const supabase = getSupabaseClient() || window.supabase;
+    if (!supabase) throw new Error("Cliente Supabase não inicializado");
+
+    const { data, error } = await supabase
+      .from("crismandos")
+      .update({ nome, telefone, valor_mensal })
+      .eq("id", id)
+      .select();
+
+    if (error) throw error;
+
+    // Atualizar no estado local
+    const idx = crismandos.findIndex((c) => c.id == id);
+    if (idx !== -1) {
+      crismandos[idx] = { ...crismandos[idx], nome, telefone, valor_mensal };
+    }
+
+    fecharModalEditarCrismando();
+    atualizarTabela();
+    atualizarSelectCrismandos();
+    atualizarEstatisticas();
+    if (typeof renderizarTabelaGeralCrismandos === "function") {
+      renderizarTabelaGeralCrismandos();
+    }
+    alert("✅ Dados do crismando atualizados com sucesso!");
+  } catch (error) {
+    console.error("Erro ao editar crismando:", error);
+    alert(`❌ Erro ao atualizar crismando: ${error.message || error}`);
   }
 }
 

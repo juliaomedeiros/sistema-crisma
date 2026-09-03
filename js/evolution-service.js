@@ -506,9 +506,9 @@ async function dispararRecibosPendentesDoDia() {
       const idx = recibosPendentesEncontro.indexOf(item);
       if (idx > -1) recibosPendentesEncontro.splice(idx, 1);
     } else if (resultadoEnvio.isError463) {
-      // WhatsApp recusou envio imediato: agendar para reenvio automático em 2 horas
-      const dataReagendada = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
-      console.warn(`⏳ Mensagem para ${tel} reagendada para reenvio automático em 2h (${dataReagendada})`);
+      // WhatsApp recusou envio imediato (Erro 463): agendar para reenvio automático em 1 hora
+      const dataReagendada = new Date(Date.now() + 1 * 60 * 60 * 1000).toISOString();
+      console.warn(`⏳ Mensagem para ${tel} reagendada (Erro 463) para reenvio em 1h (${dataReagendada})`);
       
       if (supabaseClient && item.id) {
         const tentativasAtuais = (item.tentativas || 0) + 1;
@@ -516,7 +516,22 @@ async function dispararRecibosPendentesDoDia() {
           status: "reagendado_463",
           agendado_para: dataReagendada,
           tentativas: tentativasAtuais,
-          erro_log: "WhatsApp recusou envio imediato. Reagendado automaticamente para 2 horas."
+          erro_log: "WhatsApp recusou envio imediato (463). Reagendado para 1 hora."
+        }).eq("id", item.id);
+      }
+      reagendados463++;
+    } else if (resultadoEnvio.errorCode >= 500 || resultadoEnvio.isTimeout) {
+      // Instabilidade/Erro no Servidor WhatsApp (Erro 500+): agendar para reenvio automático em 35 minutos
+      const dataReagendada = new Date(Date.now() + 35 * 60 * 1000).toISOString();
+      console.warn(`⏳ Mensagem para ${tel} reagendada (Erro 500 / Servidor) para reenvio em 35min (${dataReagendada})`);
+      
+      if (supabaseClient && item.id) {
+        const tentativasAtuais = (item.tentativas || 0) + 1;
+        await supabaseClient.from("fila_mensagens_whatsapp").update({ 
+          status: "reagendado_500",
+          agendado_para: dataReagendada,
+          tentativas: tentativasAtuais,
+          erro_log: `Erro de servidor (${resultadoEnvio.errorCode || 500}): ${resultadoEnvio.mensagemErro || "Servidor instável"}. Reagendado para 35min.`
         }).eq("id", item.id);
       }
       reagendados463++;
@@ -524,7 +539,7 @@ async function dispararRecibosPendentesDoDia() {
       falhas++;
       if (supabaseClient && item.id) {
         await supabaseClient.from("fila_mensagens_whatsapp").update({ 
-          status: "falha", 
+          status: "falha_definitiva", 
           erro_log: tel ? (resultadoEnvio.mensagemErro || "Erro ao disparar via Evolution Go") : "Sem telefone cadastrado" 
         }).eq("id", item.id);
       }
@@ -550,7 +565,7 @@ async function dispararRecibosPendentesDoDia() {
 
   let msgResultado = `🏁 Disparo dos recibos do encontro concluído!\n\n✅ Enviados com sucesso: ${enviadosOk}`;
   if (reagendados463 > 0) {
-    msgResultado += `\n⏳ Pausados temporariamente pelo WhatsApp (Reenvio automático em 2h): ${reagendados463}`;
+    msgResultado += `\n⏳ Reagendados automaticamente (Erro 463 ou 500): ${reagendados463}`;
   }
   if (falhas > 0) {
     msgResultado += `\n❌ Não foi possível entregar: ${falhas}`;
@@ -806,7 +821,7 @@ function cancelarDisparoAvisos() {
   }
 }
 
-// Check automático client-side para reprocessar mensagens reagendadas caso o usuário esteja com o sistema aberto
+// Check automático client-side para reprocessar mensagens reagendadas (463: 2h | 500: 35min)
 async function checarEProcessarFilaReagendadaClientSide() {
   try {
     const supabaseClient = (typeof getSupabaseClient === 'function' ? getSupabaseClient() : null) || window.supabaseClient;
@@ -816,23 +831,23 @@ async function checarEProcessarFilaReagendadaClientSide() {
     const { data: pendentes, error } = await supabaseClient
       .from("fila_mensagens_whatsapp")
       .select("*")
-      .eq("status", "reagendado_463")
+      .in("status", ["reagendado_463", "reagendado_500"])
       .lte("agendado_para", agora);
 
     if (error || !pendentes || pendentes.length === 0) return;
 
-    console.log(`⏳ [Auto-Reenvio 2h] Encontradas ${pendentes.length} mensagens reagendadas para envio...`);
+    console.log(`⏳ [Auto-Reenvio Background] Encontradas ${pendentes.length} mensagens reagendadas prontas para envio...`);
 
     for (const item of pendentes) {
-      if (!item.telefone || !item.mensagem_texto) continue;
+      if (!item.telefone || !item.mensagem) continue;
 
       await supabaseClient.from("fila_mensagens_whatsapp").update({ status: "processando" }).eq("id", item.id);
 
-      const res = await enviarTextoEvolutionGo(item.telefone, item.mensagem_texto);
+      const res = await enviarTextoEvolutionGo(item.telefone, item.mensagem);
       const isOk = typeof res === 'boolean' ? res : (res && res.ok);
 
       if (isOk) {
-        console.log(`✅ [Auto-Reenvio 2h] Mensagem entregue com sucesso para ${item.telefone}`);
+        console.log(`✅ [Auto-Reenvio Background] Mensagem entregue com sucesso para ${item.telefone}`);
         await supabaseClient.from("fila_mensagens_whatsapp").update({
           status: "enviado",
           enviado_em: new Date().toISOString(),
@@ -840,20 +855,26 @@ async function checarEProcessarFilaReagendadaClientSide() {
         }).eq("id", item.id);
       } else {
         const tentativas = (item.tentativas || 1) + 1;
-        if (tentativas >= 2) {
-          console.warn(`❌ [Auto-Reenvio 2h] Falha definitiva para ${item.telefone} após ${tentativas} tentativas.`);
+        const resObj = typeof res === 'object' ? res : {};
+
+        if (tentativas >= 3) {
+          console.warn(`❌ [Auto-Reenvio Background] Falha definitiva para ${item.telefone} após ${tentativas} tentativas.`);
           await supabaseClient.from("fila_mensagens_whatsapp").update({
             status: "falha_definitiva",
             tentativas: tentativas,
-            erro_log: "Não foi possível entregar após reenvio automático. Verifique o número no WhatsApp."
+            erro_log: `Não foi possível entregar após ${tentativas} tentativas de reenvio. Verifique o número no WhatsApp.`
           }).eq("id", item.id);
         } else {
-          const proximaData = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+          // Determina se o erro foi 500 (35 min) ou 463 (1h / 60min)
+          const is500 = resObj.errorCode >= 500 || resObj.isTimeout;
+          const minutosAdicionais = is500 ? 35 : 60;
+          const proximaData = new Date(Date.now() + minutosAdicionais * 60 * 1000).toISOString();
+
           await supabaseClient.from("fila_mensagens_whatsapp").update({
-            status: "reagendado_463",
+            status: is500 ? "reagendado_500" : "reagendado_463",
             agendado_para: proximaData,
             tentativas: tentativas,
-            erro_log: "WhatsApp recusou envio. Reagendado novamente para 2h."
+            erro_log: is500 ? `Servidor instável (${resObj.errorCode || 500}). Reagendado para 35min.` : "WhatsApp recusou envio (463). Reagendado para 1 hora."
           }).eq("id", item.id);
         }
       }
@@ -863,8 +884,130 @@ async function checarEProcessarFilaReagendadaClientSide() {
   }
 }
 
+// Notifica o usuário na tela sobre mensagens que falharam definitivamente ou estão pendentes de reenvio
+async function verificarEFalarFalhasAoUsuario() {
+  try {
+    const supabaseClient = (typeof getSupabaseClient === 'function' ? getSupabaseClient() : null) || window.supabaseClient;
+    if (!supabaseClient) return;
+
+    const { data: falhas, error } = await supabaseClient
+      .from("fila_mensagens_whatsapp")
+      .select("*")
+      .in("status", ["falha_definitiva", "falha"])
+      .order("created_at", { ascending: false });
+
+    if (error || !falhas || falhas.length === 0) return;
+
+    // Verificar se há um container de alerta na tela principal ou criar um modal/banner de aviso
+    console.log(`⚠️ Encontradas ${falhas.length} mensagens com falha no banco de dados.`);
+    exibirAlertaFalhasEnvio(falhas);
+
+  } catch (err) {
+    console.warn("⚠️ Erro ao verificar falhas de envio:", err);
+  }
+}
+
+function exibirAlertaFalhasEnvio(listaFalhas) {
+  const modalAntigo = document.getElementById("modalAlertaFalhasWhatsapp");
+  if (modalAntigo) modalAntigo.remove();
+
+  let htmlLinhas = "";
+  listaFalhas.forEach((item) => {
+    const dataCriacao = item.created_at ? new Date(item.created_at).toLocaleString("pt-BR") : "-";
+    htmlLinhas += `
+      <tr style="font-size: 13px;">
+        <td><strong>${item.nome_destinatario || "Crismando"}</strong></td>
+        <td>${item.telefone || "Sem fone"}</td>
+        <td><span class="badge" style="background: #e74c3c; color: white; padding: 2px 6px; border-radius: 4px;">${item.tipo || "aviso"}</span></td>
+        <td style="color: #c0392b; font-size: 12px;">${item.erro_log || "Falha na entrega"}</td>
+        <td><small>${dataCriacao}</small></td>
+        <td>
+          <button class="btn btn-warning" style="padding: 3px 8px; font-size: 11px;" onclick="tentarReenviarMensagemFalhada(${item.id})">🔄 Reenviar</button>
+        </td>
+      </tr>
+    `;
+  });
+
+  const modal = document.createElement("div");
+  modal.id = "modalAlertaFalhasWhatsapp";
+  modal.className = "modal";
+  modal.style.display = "block";
+  modal.innerHTML = `
+    <div class="modal-content" style="max-width: 750px;">
+      <span class="close" onclick="document.getElementById('modalAlertaFalhasWhatsapp').remove()">&times;</span>
+      <h3 style="color: #c0392b; text-align: center; margin-bottom: 10px;">⚠️ Relatório de Mensagens com Falha no WhatsApp</h3>
+      <p style="font-size: 13px; color: #555; text-align: center; margin-bottom: 15px;">
+        Foram encontradas <strong>${listaFalhas.length} mensagem(ns)</strong> que não puderam ser entregues após as tentativas automáticas.
+      </p>
+
+      <div class="table-container" style="max-height: 280px; overflow-y: auto; margin-bottom: 15px;">
+        <table>
+          <thead>
+            <tr>
+              <th>Destinatário</th>
+              <th>Telefone</th>
+              <th>Tipo</th>
+              <th>Motivo da Falha</th>
+              <th>Data</th>
+              <th>Ação</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${htmlLinhas}
+          </tbody>
+        </table>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button class="btn btn-secondary" style="background: #6c757d; color: white;" onclick="document.getElementById('modalAlertaFalhasWhatsapp').remove()">Entendido / Fechar</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+}
+
+async function tentarReenviarMensagemFalhada(idMensagem) {
+  try {
+    const supabaseClient = (typeof getSupabaseClient === 'function' ? getSupabaseClient() : null) || window.supabaseClient;
+    if (!supabaseClient) return;
+
+    const { data: item, error } = await supabaseClient
+      .from("fila_mensagens_whatsapp")
+      .select("*")
+      .eq("id", idMensagem)
+      .single();
+
+    if (error || !item) {
+      alert("Mensagem não encontrada.");
+      return;
+    }
+
+    const res = await enviarTextoEvolutionGo(item.telefone, item.mensagem);
+    const isOk = typeof res === 'boolean' ? res : (res && res.ok);
+
+    if (isOk) {
+      alert(`✅ Mensagem reenviada com sucesso para ${item.nome_destinatario}!`);
+      await supabaseClient.from("fila_mensagens_whatsapp").update({
+        status: "enviado",
+        enviado_em: new Date().toISOString(),
+        erro_log: null
+      }).eq("id", idMensagem);
+
+      const modal = document.getElementById("modalAlertaFalhasWhatsapp");
+      if (modal) modal.remove();
+      verificarEFalarFalhasAoUsuario();
+    } else {
+      alert(`❌ Nova tentativa falhou. Verifique se o número no WhatsApp é válido.`);
+    }
+  } catch (err) {
+    alert(`Erro ao tentar reenviar: ${err.message || err}`);
+  }
+}
+
 // Iniciar verificação da fila a cada 10 minutos no cliente
 setInterval(checarEProcessarFilaReagendadaClientSide, 10 * 60 * 1000);
 setTimeout(checarEProcessarFilaReagendadaClientSide, 5000);
+setTimeout(verificarEFalarFalhasAoUsuario, 3000);
 
 
