@@ -77,7 +77,7 @@ function popularSelectEncontros() {
   if (!select) return;
 
   const valorAtual = select.value;
-  select.innerHTML = '<option value="">-- Selecione ou crie um encontro --</option>';
+  select.innerHTML = '<option value="">📋 Visão Geral da Turma (Selecione um encontro para chamada)</option>';
 
   encontros.forEach(e => {
     const opt = document.createElement("option");
@@ -161,6 +161,11 @@ function filtrarStatusChamada(status) {
 }
 
 function marcarTodosPresentesChamada() {
+  const encontroId = parseInt(document.getElementById("selectEncontroChamada")?.value || 0);
+  if (!encontroId) {
+    alert("Por favor, selecione um encontro para realizar a chamada.");
+    return;
+  }
   if (!crismandos || crismandos.length === 0) return;
 
   crismandos.forEach(c => {
@@ -195,15 +200,19 @@ function atualizarContadoresFiltrosChamada() {
   let cntF = 0;
   let cntJ = 0;
 
+  const encontroId = parseInt(document.getElementById("selectEncontroChamada")?.value || 0);
+
   if (crismandos) {
     cntTodos = crismandos.length;
-    crismandos.forEach(c => {
-      const radio = document.querySelector(`input[name="status_presenca_${c.id}"]:checked`);
-      const val = radio ? radio.value : "PRESENTE";
-      if (val === "PRESENTE") cntP++;
-      else if (val === "FALTA") cntF++;
-      else if (val === "JUSTIFICADO") cntJ++;
-    });
+    if (encontroId) {
+      crismandos.forEach(c => {
+        const radio = document.querySelector(`input[name="status_presenca_${c.id}"]:checked`);
+        const val = radio ? radio.value : "PRESENTE";
+        if (val === "PRESENTE") cntP++;
+        else if (val === "FALTA") cntF++;
+        else if (val === "JUSTIFICADO") cntJ++;
+      });
+    }
   }
 
   const elTodos = document.getElementById("cntFiltro_TODOS");
@@ -223,7 +232,15 @@ function atualizarTabelaChamada() {
 
   tbody.innerHTML = "";
 
-  const encontroId = parseInt(document.getElementById("selectEncontroChamada")?.value || 0);
+  const selectEncontro = document.getElementById("selectEncontroChamada");
+  const encontroId = parseInt(selectEncontro?.value || 0);
+
+  const btnMarcar = document.getElementById("btnMarcarTodosPresentes");
+  const btnSalvar = document.getElementById("btnSalvarChamada");
+  const tituloTabela = document.getElementById("tituloTabelaChamada");
+
+  const termo = window.termoBuscaChamada || "";
+  const filtroStatus = window.filtroStatusChamada || "TODOS";
 
   if (!crismandos || crismandos.length === 0) {
     tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:#888;">Nenhum crismando cadastrado.</td></tr>`;
@@ -231,11 +248,59 @@ function atualizarTabelaChamada() {
     return;
   }
 
+  // =========================================================================
+  // MODO 1: VISÃO GERAL DA TURMA (Nenhum encontro selecionado)
+  // =========================================================================
+  if (!encontroId) {
+    if (tituloTabela) tituloTabela.innerHTML = `📋 Panorama Geral de Faltas Acumuladas no Ciclo`;
+    if (btnMarcar) { btnMarcar.disabled = true; btnMarcar.style.opacity = "0.5"; btnMarcar.style.cursor = "not-allowed"; }
+    if (btnSalvar) { btnSalvar.disabled = true; btnSalvar.style.opacity = "0.5"; btnSalvar.style.cursor = "not-allowed"; }
+
+    let crismandosExibidos = crismandos.filter(c => {
+      return !termo || c.nome.toLowerCase().includes(termo);
+    });
+
+    if (crismandosExibidos.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:#888; padding: 20px;">Nenhum crismando encontrado para "${termo}".</td></tr>`;
+      atualizarContadoresFiltrosChamada();
+      return;
+    }
+
+    crismandosExibidos.forEach(c => {
+      const qtdFaltas = mapaFaltasAcumuladas[String(c.id)] || 0;
+      const badgeHTML = obterBadgeFaltas(qtdFaltas);
+
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td><strong>${c.nome}</strong></td>
+        <td>${c.telefone || "-"}</td>
+        <td>${badgeHTML}</td>
+        <td>
+          <span style="font-size: 12px; color: #64748b; italic;">ℹ️ Selecione um encontro acima para lançar a chamada</span>
+        </td>
+        <td>
+          <span style="font-size: 12px; color: #94a3b8;">-</span>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    atualizarContadoresFiltrosChamada();
+    return;
+  }
+
+  // =========================================================================
+  // MODO 2: CHAMADA ATIVA DO ENCONTRO SELECIONADO
+  // =========================================================================
+  const encontroSel = encontros.find(e => e.id === encontroId);
+  const dataTemaStr = encontroSel ? `${encontroSel.data_encontro} - ${encontroSel.tema || "Sem tema"}` : "";
+
+  if (tituloTabela) tituloTabela.innerHTML = `📝 Chamada do Encontro: <span style="color:#2980b9;">${dataTemaStr}</span>`;
+  if (btnMarcar) { btnMarcar.disabled = false; btnMarcar.style.opacity = "1"; btnMarcar.style.cursor = "pointer"; }
+  if (btnSalvar) { btnSalvar.disabled = false; btnSalvar.style.opacity = "1"; btnSalvar.style.cursor = "pointer"; }
+
   // Filtrar presenças salvas para este encontro específico
   const presencasDoEncontro = presencas.filter(p => String(p.encontro_id) === String(encontroId));
-
-  const termo = window.termoBuscaChamada || "";
-  const filtroStatus = window.filtroStatusChamada || "TODOS";
 
   let crismandosExibidos = crismandos.filter(c => {
     // Filtro por nome
