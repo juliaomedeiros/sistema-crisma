@@ -491,12 +491,125 @@
                             <label for="cfgValorMensalPadrao">Valor Mensal Padrão (R$):</label>
                             <input type="number" id="cfgValorMensalPadrao" step="0.01" value="10.00">
                         </div>
+
+                        <div class="form-group" style="grid-column: span 2;">
+                            <label for="cfgTelefoneCoordenador">📱 WhatsApp do Coordenador (para Relatórios & Notificações de Lote):</label>
+                            <input type="tel" id="cfgTelefoneCoordenador" placeholder="(83) 99999-9999">
+                            <small style="color: #666; font-size: 12px; display: block; margin-top: 4px;">
+                                Recebe automaticamente o relatório consolidado ao finalizar lotes de mensagens e alertas críticos em caso de bloqueio ou desconexão.
+                            </small>
+                        </div>
                     </div>
 
                     <div style="margin-top: 10px;">
                         <button class="btn btn-success" onclick="salvarConfiguracoesFormulario()">
                             💾 Salvar Configurações da Turma
                         </button>
+                    </div>
+                </div>
+
+                <!-- Central de Monitoramento da Fila de Mensagens e Controle Anti-Ban -->
+                <div class="section" id="secaoMonitoramentoFila">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 15px;">
+                        <h3 style="margin: 0;">📊 Central de Monitoramento — Fila de Mensagens WhatsApp</h3>
+                        <button class="btn btn-info" style="padding: 6px 14px; font-size: 13px;" onclick="inicializarDashboardFila()">
+                            🔄 Atualizar Fila
+                        </button>
+                    </div>
+
+                    <!-- Banner de Alerta do Timelock (Exibido apenas quando ativo) -->
+                    <div id="bannerTimelockAlert" style="display: none; background: #fde8e8; border: 2px solid #e74c3c; border-radius: 8px; padding: 15px; margin-bottom: 20px; color: #900;">
+                        <div style="display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: bold; margin-bottom: 8px;">
+                            <span>🚨</span>
+                            <span>RESTRIÇÃO WHATSAPP ATIVA (NotifyAccountReachoutTimelock)</span>
+                        </div>
+                        <p style="font-size: 13.5px; margin: 0 0 10px 0; line-height: 1.4;">
+                            O WhatsApp aplicou uma trava temporária nesta conta por suspeita de automação. A fila de mensagens foi <strong>CONGELADA automaticamente</strong> para evitar banimento permanente.
+                        </p>
+                        <div style="background: white; border: 1px solid #f8b4b4; padding: 10px 14px; border-radius: 6px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; font-size: 13px;">
+                            <div>⏰ <strong>Desbloqueio previsto:</strong> <span id="dataExpiracaoTimelock">-</span></div>
+                            <div>⏳ <strong>Tempo restante:</strong> <span id="tempoRestanteTimelock" style="color: #c0392b; font-weight: bold;">-</span></div>
+                        </div>
+                        <small style="display: block; margin-top: 8px; color: #7f1d1d;">💡 O worker do servidor retomará os envios automaticamente assim que o prazo expirar. Não force envios nem reconecte.</small>
+                    </div>
+
+                    <!-- Cards de Métricas e Limite Anti-Ban -->
+                    <div class="stats" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin-bottom: 20px;">
+                        <div class="stat-card" style="background: linear-gradient(45deg, #f39c12, #e67e22);">
+                            <div class="stat-number" id="metricFilaPendentes">0</div>
+                            <div>📋 Na Fila (Pendentes)</div>
+                        </div>
+
+                        <div class="stat-card" style="background: linear-gradient(45deg, #27ae60, #2ecc71);">
+                            <div class="stat-number" id="metricFilaEnviadosHoje">0</div>
+                            <div>✅ Enviadas Hoje</div>
+                        </div>
+
+                        <div class="stat-card" style="background: linear-gradient(45deg, #c0392b, #e74c3c);">
+                            <div class="stat-number" id="metricFilaFalhas">0</div>
+                            <div>❌ Falhas Definitivas</div>
+                        </div>
+
+                        <div class="stat-card" style="background: linear-gradient(45deg, #8e44ad, #9b59b6);">
+                            <div class="stat-number" id="metricFilaReagendadas">0</div>
+                            <div>⏳ Reagendadas (463/500)</div>
+                        </div>
+
+                        <div class="stat-card" style="background: linear-gradient(45deg, #2c3e50, #34495e);">
+                            <div class="stat-number" id="metricFilaLimiteHoje" style="font-size: 1.8em;">0 / 60</div>
+                            <div>🛡️ Teto Seguro Diário</div>
+                            <div style="background: rgba(255,255,255,0.3); height: 6px; border-radius: 3px; margin-top: 8px; overflow: hidden;">
+                                <div id="barraFilaLimiteHoje" style="background: #2ecc71; height: 100%; width: 0%; transition: width 0.3s;"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Status da Instância Evolution Go -->
+                    <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 15px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+                        <div>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <strong style="color: #1e293b; font-size: 14px;">📡 Conexão da Instância:</strong>
+                                <span id="badgeInstanciaStatus" class="badge" style="background: #f39c12; color: white; padding: 4px 10px; border-radius: 4px; font-size: 12px;">⏳ Testando...</span>
+                            </div>
+                            <small id="txtInstanciaDetalhes" style="color: #64748b; font-size: 12px; margin-top: 4px; display: block;">Checando comunicação com o Evolution Go...</small>
+                        </div>
+                        <div style="display: flex; gap: 10px;">
+                            <button class="btn btn-sm btn-info" style="padding: 6px 12px; font-size: 12px;" onclick="checarStatusInstanciaEvolution()">
+                                🔄 Testar Conexão
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Tabela da Fila de Mensagens com Filtros por Tipo -->
+                    <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 15px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
+                            <h4 style="color: #2c3e50; margin: 0;">📋 Histórico & Mensagens na Fila</h4>
+                            <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
+                                <span style="font-size: 12px; font-weight: bold; color: #64748b; margin-right: 4px;">Tipo:</span>
+                                <button type="button" class="chip-filtro-fila active" id="chipFila_TODOS" onclick="carregarTabelaMensagensFila('TODOS')">Todos</button>
+                                <button type="button" class="chip-filtro-fila" id="chipFila_aviso_lote" onclick="carregarTabelaMensagensFila('aviso_lote')">📢 Avisos em Lote</button>
+                                <button type="button" class="chip-filtro-fila" id="chipFila_cobranca" onclick="carregarTabelaMensagensFila('cobranca')">💰 Cobranças</button>
+                                <button type="button" class="chip-filtro-fila" id="chipFila_recibo" onclick="carregarTabelaMensagensFila('recibo')">🧾 Recibos</button>
+                            </div>
+                        </div>
+
+                        <div class="table-container" style="max-height: 380px; overflow-y: auto;">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Destinatário</th>
+                                        <th>Telefone</th>
+                                        <th>Tipo de Envio</th>
+                                        <th>Status</th>
+                                        <th>Detalhes do Erro / Status</th>
+                                        <th>Ação</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="corpoTabelaFilaMensagens">
+                                    <!-- Preenchido via dashboard-fila.js -->
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
 
@@ -669,6 +782,7 @@ Sua presença é fundamental na nossa caminhada de fé!</textarea>
             <script src="js/financeiro.js"></script>
             <script src="js/frequencia.js"></script>
             <script src="js/evolution-service.js"></script>
+            <script src="js/dashboard-fila.js"></script>
             <script src="js/excel-import.js"></script>
             <script src="js/app.js"></script>
         </div>

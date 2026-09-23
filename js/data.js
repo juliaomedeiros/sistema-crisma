@@ -81,12 +81,14 @@ function salvarConfiguracoesFormulario() {
   const anoInicio = parseInt(document.getElementById("cfgAnoInicioCiclo")?.value || 2026);
   const valPadrao = parseFloat(document.getElementById("cfgValorMensalPadrao")?.value || 10.00) || 10.00;
   const nomeTurma = document.getElementById("cfgNomeTurma")?.value.trim() || "Crisma de Adultos";
+  const telCoord = document.getElementById("cfgTelefoneCoordenador")?.value.trim() || "";
 
   salvarConfiguracoesSistema({
     mes_inicio_ciclo: mesInicio,
     ano_inicio_ciclo: anoInicio,
     valor_mensal_padrao: valPadrao,
-    nome_turma: nomeTurma
+    nome_turma: nomeTurma,
+    telefone_coordenador: telCoord
   });
 }
 
@@ -96,11 +98,13 @@ function preencherPainelConfiguracoes() {
   const selAno = document.getElementById("cfgAnoInicioCiclo");
   const inpVal = document.getElementById("cfgValorMensalPadrao");
   const inpNom = document.getElementById("cfgNomeTurma");
+  const inpCoord = document.getElementById("cfgTelefoneCoordenador");
 
   if (selMes) selMes.value = cfg.mes_inicio_ciclo;
   if (selAno) selAno.value = cfg.ano_inicio_ciclo;
   if (inpVal) inpVal.value = (cfg.valor_mensal_padrao || 10.00).toFixed(2);
   if (inpNom) inpNom.value = cfg.nome_turma || "Crisma de Adultos";
+  if (inpCoord && cfg.telefone_coordenador) inpCoord.value = cfg.telefone_coordenador;
 
   const valForm = document.getElementById("valorUnitario");
   if (valForm && (!valForm.value || valForm.value === "10.00")) {

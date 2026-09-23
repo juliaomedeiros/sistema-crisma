@@ -603,7 +603,7 @@ tr:hover {
 /* ====================================================================
    CHIPS DE FILTRO E BOTÕES PÍLULA DE CHAMADA (MOBILE FIRST)
    ==================================================================== */
-.chip-filtro-chamada {
+.chip-filtro-chamada, .chip-filtro-fila {
     background: #f1f5f9;
     color: #475569;
     border: 1px solid #cbd5e1;
@@ -615,11 +615,11 @@ tr:hover {
     transition: all 0.2s ease;
 }
 
-.chip-filtro-chamada:hover {
+.chip-filtro-chamada:hover, .chip-filtro-fila:hover {
     background: #e2e8f0;
 }
 
-.chip-filtro-chamada.active {
+.chip-filtro-chamada.active, .chip-filtro-fila.active {
     background: #1e293b;
     color: #ffffff;
     border-color: #1e293b;
