@@ -1,118 +1,210 @@
-# GEMINI.md - Documentação e Estado do Projeto: Sistema Crisma
+# GEMINI.md - Documentação Completa da Arquitetura e Estado: Sistema Crisma
 
-Este documento tem como objetivo servir de referência rápida e completa para LLMs (e desenvolvedores) sobre a finalidade, arquitetura, funcionalidades e estado atual do projeto **Sistema Crisma - Santuário Mãe Rainha**.
-
----
-
-## 📌 Visão Geral do Projeto
-
-O **Sistema Crisma** é uma aplicação web voltada para a gestão financeira e de contribuições mensais dos crismandos da turma de **Crisma de Adultos do Santuário Mãe Rainha** (Igreja Católica Apostólica Romana).
-
-- **Objetivo**: Facilitar o cadastro de crismandos, o registro e controle de contribuições mensais, a geração de comprovantes digitais (PNG), a comunicação direta via WhatsApp e a geração de relatórios exportáveis em Excel.
-- **Tipo de Aplicação**: Web Single-Page Application (SPA) responsiva.
-- **Público-alvo**: Coordenadores e organizadores da catequese de crisma.
+> **Finalidade do Documento:** Este arquivo é a fonte única da verdade para LLMs, agentes de IA e desenvolvedores que trabalham no projeto **Sistema Crisma - Santuário Mãe Rainha**. Toda a arquitetura, regras de negócio, banco de dados, proteções anti-ban e fluxos estão detalhados aqui.
 
 ---
 
-## 🛠️ Arquitetura e Tecnologias
+## 📌 1. Visão Geral do Projeto
 
-- **Frontend**: HTML5, Vanilla CSS (`css/styles.css`), Vanilla JavaScript (modularizado sem frameworks pesados).
-- **Backend / Banco de Dados**: [Supabase](https://supabase.com/) (PostgreSQL cloud acessado via SDK JavaScript Client v2).
-- **Bibliotecas Externas**:
-  - `@supabase/supabase-js@2` (CDN) — Comunicação com o banco Supabase.
-  - `xlsx` (SheetJS via cdnjs) — Exportação de dados para relatórios em Excel (`.xlsx`).
-- **Autenticação**: Sistema customizado client-side (`auth.js`) com criptografia de senha via `Web Crypto API` (SHA-256), controle de sessão via `localStorage` (timeout de 30min) e limitação de tentativas no Supabase.
+O **Sistema Crisma** é uma aplicação web Single-Page Application (SPA) responsiva criada para a **Pastoral da Crisma de Adultos do Santuário Mãe Rainha** (Igreja Católica Apostólica Romana).
+
+- **Objetivo Principal:** Gerenciar integralmente o ciclo catequético de uma turma de crisma (atualmente ~180 crismandos), abrangendo:
+  1. Cadastro e importação de alunos via Excel.
+  2. Registro financeiro de mensalidades e contribuições mensais.
+  3. Gestão completa do fluxo de caixa paroquial (entradas extras e despesas).
+  4. Controle de chamada e frequência nos encontros com régua de faltas.
+  5. Geração de comprovantes digitais (PNG e texto formatado).
+  6. Disparo de avisos, lembretes de cobrança e recibos via WhatsApp de forma **100% autônoma no servidor** com **proteção Anti-Ban estrita (teto de 60 msgs/dia)**.
+- **Público-alvo:** Coordenadores e catequistas da turma.
+- **Filosofia de Código:** Vanilla Web (HTML5, CSS3 puro, JavaScript Vanilla modular). Zero frameworks pesados (sem React, Vue, Angular ou bundlers como Vite/Webpack). Leve, rápido e acessível via navegador mobile ou desktop.
 
 ---
 
-## 📁 Estrutura de Arquivos e Responsabilidades
+## 🛠️ 2. Arquitetura e Tecnologias
+
+- **Frontend:**
+  - HTML5 semântico com navegação por abas responsivas (`tabInicio`, `tabCrismandos`, `tabFrequencia`, `tabFinanceiro`, `tabEvolution`, `tabAvisosLote`).
+  - CSS3 puro (`css/styles.css`) com suporte a Dark/Light accents, Grid, Flexbox e Mobile First.
+  - JavaScript Vanilla estruturado em módulos por responsabilidade (`js/`).
+- **Backend Serverless & Banco de Dados (Supabase Cloud):**
+  - **PostgreSQL 15** hospedado no Supabase (`https://yqqpugheqqknpbetysme.supabase.co`).
+  - SDK `@supabase/supabase-js@2` (via CDN).
+  - **Extensões Ativas:** `pg_cron` (agendamento em banco) e `pg_net` (requisições HTTP assíncronas do banco).
+  - **Edge Functions (Deno/TypeScript):**
+    - `enviar-whatsapp`: Proxy seguro para disparo individual via Evolution Go.
+    - `processar-fila-whatsapp`: Worker autônomo agendado pelo `pg_cron` a cada 2 minutos.
+    - `processar-fila-reagendada`: Reprocessador legado para falhas 463/500.
+- **WhatsApp Gateway:**
+  - [Evolution Go](https://github.com/evolution-foundation/evolution-go) (baseado na biblioteca em Go `whatsmeow`).
+  - Hospedado em VPS Oracle Cloud (`http://144.22.164.103:8080/`), instância `crisma-mae-rainha`.
+- **Autenticação Client-Side:**
+  - `auth.js` com SHA-256 via `Web Crypto API`, timeout de 30 minutos de inatividade, renovação automática durante operações e limite de tentativas na tabela `usuarios_autenticados`.
+- **Relatórios & Excel:**
+  - `xlsx.full.min.js` (SheetJS via cdnjs) para geração e download de relatórios `.xlsx`.
+
+---
+
+## 📁 3. Estrutura de Arquivos e Responsabilidades
 
 ```
 c:\ProjectsCode\sistema-crisma\
-├── index.html                  # Interface gráfica principal e estruturação dos módulos
-├── auth.js                     # Classe AuthSystem: Login, hash SHA-256, gerenciamento de sessão e bloqueio
-├── env.js                      # Variáveis de ambiente (SUPABASE_URL e SUPABASE_ANON_KEY)
-├── package.json                # Configuração do projeto Node / Ferramentas de ofuscação e build
-├── README.md                   # Resumo rápido e instrução de uso
-├── GEMINI.md                   # Documentação detalhada da arquitetura, funcionalidades e estado do projeto
+├── index.html                  # Interface gráfica principal e estruturação das 6 abas
+├── auth.js                     # Classe AuthSystem: Login, SHA-256, timeout de sessão e logout
+├── env.js                      # Configurações de ambiente (URLs do Supabase e Evolution Go)
+├── plano-fila-backend.md       # Especificação detalhada da fila autônoma e anti-ban
+├── README.md                   # Apresentação do projeto e guia rápido de uso
+├── GEMINI.md                   # Documentação mestre completa do sistema
 ├── assets/
 │   └── mae rainha-1.png        # Logomarca oficial do Santuário Mãe Rainha
 ├── css/
-│   └── styles.css              # Estilização global da aplicação (Cores, grids, botões, modais)
+│   └── styles.css              # Estilos globais, modais, cards de dashboard, chips e tabelas
 ├── js/
-│   ├── app.js                  # Inicialização da aplicação (DOMContentLoaded, verificação de auth e eventos)
-│   ├── supabase-config.js      # Inicialização do cliente Supabase e teste de conexão
-│   ├── data.js                 # Manipulação de estado e dados (Crismandos, pagamentos paginados via .range(), códigos de autenticação)
-│   ├── comprovante.js          # Geração de comprovante visual em Canvas (PNG), lógica de envio WhatsApp e detecção de dispositivos (iOS/Android/Desktop)
-│   └── utils.js                # Funções utilitárias, calculadoras de relatórios, exportação Excel, autocomplete e validações
-└── .agent/
-    └── skill/
-        └── consultor-tecnico/  # Skill de consultoria técnica para arquitetura, segurança e boas práticas
+│   ├── app.js                  # Inicialização do DOM, verificação de auth e alternância de abas
+│   ├── supabase-config.js      # Inicialização do cliente Supabase e teste de ping
+│   ├── data.js                 # Estado local (crismandos, pagamentos paginados, configs do ciclo)
+│   ├── comprovante.js          # Canvas HTML5 para comprovante PNG, texto consolidado e links wa.me
+│   ├── evolution-service.js    # Enfileiramento de avisos, cobranças e recibos na fila do Supabase
+│   ├── dashboard-fila.js       # Central de monitoramento da fila, cards, timelock e conexão Evolution
+│   ├── frequencia.js           # Gestão de encontros catequéticos e chamada de presença
+│   ├── financeiro.js           # Livro caixa: lançamentos de despesas e entradas extras
+│   ├── excel-import.js         # Importação em massa de crismandos via planilha .xlsx
+│   └── utils.js                # Normalização de telefones (+55 83...), máscaras, relatórios Excel e busca
+└── supabase/
+    ├── setup_fila_backend.sql  # DDL das tabelas de fila, controle diário e cron job do worker
+    ├── setup_reagendamento.sql # Script SQL legado para fila reagendada
+    └── functions/
+        ├── enviar-whatsapp/             # Edge Function proxy de envio individual
+        ├── processar-fila-whatsapp/     # Edge Function worker autônomo (anti-ban + 60/dia)
+        └── processar-fila-reagendada/   # Edge Function legada de reprocessamento
 ```
 
 ---
 
-## ⚡ Funcionalidades Implementadas
+## 🖥️ 4. As 6 Abas da Aplicação
 
-### 1. Autenticação e Segurança
-- Tela de login protegida por senha.
-- Hash SHA-256 para senhas antes da verificação.
-- Tabela Supabase associada: `usuarios_autenticados`.
-- Bloqueio temporário de 15 minutos após 3 tentativas malsucedidas.
-- Banner com dados do usuário logado e botão de Logout seguro.
+### Aba 1: 🏠 Início & Pagamentos (`tabInicio`)
+- **Dashboard Financeiro Geral:** 5 cards com métricas em tempo real (Total de Crismandos, Mensalidades Quitadas, Entradas Extras, Total de Despesas, Saldo Atual em Caixa).
+- **Alerta de Inadimplência:** Identifica devedores do mês corrente e abre o modal de cobrança com botão `📱 Gerar Lembretes de Cobrança`.
+- **Formulário de Pagamento Multi-Mês:**
+  - Campo com autocomplete dinâmico para seleção do crismando.
+  - Grade de 12 botões/checkboxes correspondentes ao ciclo catequético (Setembro do ano de início até Agosto do ano seguinte).
+  - Cálculo instantâneo do valor total baseado na quantidade de meses selecionados.
+  - Botão `💰 Registrar Pagamento(s)`: Salva no Supabase prevenindo duplicidades.
+  - Botão `🧾 Ver Comprovante em Texto`: Exibe modal com texto pronto, versículo bíblico e código de autenticação único de 8 caracteres.
+  - Botão `🧾 Disparar Recibos Pendentes do Encontro`: Enfileira os comprovantes acumulados na fila autônoma do servidor.
+- **Pesquisa Individual & Matriz Anual:** Histórico completo de contribuições de cada aluno com cards coloridos (verde = pago, vermelho = pendente).
+- **Relatório Mensal e Exportação Excel:** Tabela filtrável por Mês/Ano e exportação para `.xlsx`.
 
-### 2. Gestão de Crismandos
-- Cadastro de novos crismandos (Nome, Telefone e Valor Mensal).
-- Exclusão e listagem de crismandos.
-- Autocomplete no campo de busca para seleção rápida no registro de pagamentos.
-- Tabela Supabase associada: `crismandos`.
+### Aba 2: 👥 Turma & Excel (`tabCrismandos`)
+- **Importação em Massa via Excel:** Leitura de planilhas `.xlsx` com colunas *Nome* e *Telefone*, cadastrando dezenas de crismandos com validação automática.
+- **Cadastro Individual:** Formulário manual para adicionar novos crismandos.
+- **Tabela Dinâmica:** Busca em tempo real por nome/telefone, edição e exclusão.
 
-### 3. Registro de Pagamentos
-- Seleção inteligente por autocomplete do crismando.
-- Seleção de Mês (Janeiro a Dezembro) e Ano (2026 a 2029).
-- Prevenção de duplicidade: não permite registrar o mesmo mês/ano duas vezes para um crismando.
-- Leitura paginada com `.range()` no Supabase para suportar mais de 1000 registros sem limitação do SDK.
-- Tabela Supabase associada: `pagamentos`.
+### Aba 3: 📅 Frequência (`tabFrequencia`)
+- **Cadastro de Encontros:** Data, tema da aula e observações.
+- **Chamada Interativa:**
+  - Lista de chamada com filtros rápidos por chips (`Todos`, `🟢 Presentes`, `🔴 Faltas`, `🟡 Justificados`).
+  - Botão de atalho `☑️ Marcar Todos Presentes`.
+  - **Régua de Alertas de Faltas:**
+    - 🟡 3 Faltas: Aviso inicial.
+    - 🟠 5 Faltas: Atenção moderada.
+    - 🔴 6 Faltas: Alerta crítico.
+    - ⛔ 7+ Faltas: Desligado da turma.
 
-### 4. Geração e Envio de Comprovantes
-- Desenhador de comprovante via HTML5 Canvas (layout formatado com título, dados da contribuição, versículo bíblico aleatório e código de autenticação único de 8 caracteres).
-- Salva o comprovante em formato PNG.
-- Código de autenticação registrado na tabela `codigos_autenticacao`.
-- Envio inteligente para WhatsApp com detecção automática do dispositivo:
-  - **iOS (iPad/iPhone)**: Interface ajustada com abertura de imagem em nova aba e instrução para salvar na galeria.
-  - **Android**: Download automático da imagem com disparo da intent nativa do WhatsApp (`whatsapp://`).
-  - **Desktop**: Download direto e abertura do WhatsApp Web (`wa.me`).
+### Aba 4: 📊 Gestão de Caixa (`tabFinanceiro`)
+- **Livro Caixa Paroquial:**
+  - Lançamento de despesas com categorias (*Material Didático*, *Alimentação/Lanche*, *Liturgia e Eventos*, *Outros*).
+  - Lançamento de entradas extras (*Taxa Extra*, *Doação*, *Oferta Avulsa*, *Inscrição Retiro*).
+  - Tabelas discriminadas com exclusão e recálculo automático do saldo geral.
 
-### 5. Relatórios e Exportação
-- Painel de estatísticas no topo (Total de crismandos, valor arrecadado).
-- Relatório Mensal filtrável por Mês/Ano.
-- Relatório Completo interativo por cards com resumo financeiro por mês.
-- Exportação para Excel (`.xlsx`) do relatório do mês ou relatório completo.
-- Pesquisa individual de histórico financeiro por nome do crismando.
-- Ferramenta de validação de números de telefone para garantir formato válido no WhatsApp.
-- Validador de comprovantes por código de 8 caracteres.
+### Aba 5: ⚙️ Servidor WhatsApp & Configurações (`tabEvolution`)
+- **Configurações da Turma:** Mês de início do ciclo (padrão: Setembro), ano de início, valor mensal padrão e nome da edição.
+- **Configuração do Coordenador:** Campo para cadastrar o WhatsApp do coordenador que receberá relatórios e alertas automáticos.
+- **Central de Monitoramento da Fila de Mensagens (NOVO):**
+  - **5 Cards de Métricas:** *Na Fila*, *Enviadas Hoje*, *Falhas Definitivas*, *Reagendadas*, *Teto Seguro Diário (ex: 47 / 60 com barra de progresso visual)*.
+  - **Banner de Alerta `NotifyAccountReachoutTimelock`:** Contagem regressiva em tempo real exibindo a expiração de restrições do WhatsApp com aviso de fila congelada.
+  - **Status da Instância Evolution Go:** Checagem via API HTTP (🟢 Conectado / 🔴 Desconectado / 🟡 Aguardando QR).
+  - **Tabela Histórica com Filtros:** Filtro por chips (`Todos`, `📢 Avisos em Lote`, `💰 Cobranças`, `🧾 Recibos`), descrição do erro e botão **`[🔄 Reenviar]`** individual com prioridade alta.
 
----
-
-## 📍 Onde o Projeto Parou (Estado Atual)
-
-- O projeto está **estável e operacional** em produção client-side integrado ao Supabase.
-- **Últimas melhorias efetuadas**:
-  1. Adicionado sistema de autenticação client-side (`auth.js`) integrado ao Supabase.
-  2. Implementada busca por autocomplete no formulário de pagamento (`campoBuscaCrismando`).
-  3. Corrigido o limite de 1000 registros do Supabase utilizando busca paginada (`.range()`) em `carregarDados()`.
-  4. Adicionada compatibilidade completa de download/compartilhamento de comprovantes em aparelhos móveis (iOS e Android).
-  5. Adicionada skill de agente consultor técnico em `.agent/skill/consultor-tecnico`.
-- **Seções inativas / comentadas temporariamente no `index.html`**:
-  - Bloco de Upload de Planilha Excel (linhas 43-51 em `index.html`).
-  - Tabela principal fixa de crismandos no rodapé (linhas 182-201 em `index.html`), substituída pela dinâmica de relatórios e busca.
+### Aba 6: 📢 Avisos em Lote (`tabAvisosLote`)
+- **Compositor de Mensagens Livres:** Textarea com suporte a variáveis dinâmicas (`{nome}`, `{telefone}`, `{valor}`).
+- **Preview Visual do WhatsApp:** Card estilizado simulando a visão exata do crismando.
+- **Seleção Flexível:** Botões `[Marcar Todos]`, `[Desmarcar Todos]` e checkboxes individuais de cada aluno.
+- **Disparo Seguro em Background:** Ao clicar em `🚀 Iniciar Disparo em Lote`, enfileira apenas os contatos marcados na fila do banco de dados e libera o operador imediatamente.
 
 ---
 
-## 🤖 Guia de Orientação para a LLM
+## 🛡️ 5. Arquitetura da Fila Backend e Protocolo Anti-Ban
 
-Ao continuar o desenvolvimento deste projeto, siga as diretrizes:
-1. **Preserve a simplicidade (KISS/YAGNI)**: O sistema é construído em JavaScript Vanilla e HTML/CSS limpos sem bundlers pesados ou frameworks frontend. Mantenha essa abordagem a menos que explicitamente solicitado.
-2. **Respeite a integração com Supabase**: As tabelas principais no banco são `crismandos`, `pagamentos`, `codigos_autenticacao` e `usuarios_autenticados`. Sempre trate erros de consulta Supabase e mantenha a paginação `.range()` ao listar `pagamentos`.
-3. **Mantenha o idioma em Português (PT-BR)** para comentários, mensagens de erro, alertas e interface de usuário.
-4. **Consultor Técnico**: Para decisões de arquitetura ou refatoração relevante, consulte a skill em `.agent/skill/consultor-tecnico/SKILL.md`.
+### O Problema Resolvido:
+O envio de mensagens para contatos novos ou sem histórico (*cold reachout*) por APIs não-oficiais (whatsmeow / Evolution Go) aciona os filtros heurísticos da Meta caso haja rajadas sequenciais, gerando o evento `NotifyAccountReachoutTimelock` (trava de 24 horas) e revogação da sessão (`device_removed / 401`).
+
+### As 5 Camadas de Proteção Ativas:
+
+1. **Teto Rígido de 60 Mensagens/Dia:**
+   - Controlado via banco na tabela `controle_envios_diarios`.
+   - Para a base de ~180 crismandos, o lote é distribuído em ~3 dias úteis.
+2. **Horário Comercial Estrito:**
+   - A Edge Function só dispara mensagens entre **08:00 e 20:00** (horário de Brasília). Fora desse horário, descansa automaticamente.
+3. **Jitter Estocástico Anti-Padrão:**
+   - 20% das invocações do `pg_cron` são propositalmente puladas para que os envios não ocorram em intervalos matemáticos idênticos.
+4. **Composing Humano Proporcional:**
+   - O worker envia o estado `presence: "composing"` (digitando...) proporcional ao tamanho da mensagem (~35ms por caractere, entre 3.5s e 9.5s).
+5. **Circuit Breaker para Timelock e Falhas:**
+   - Se o WhatsApp retornar erro 463 ou evento de Reachout Timelock, o sistema grava `timelock_ativo = true` e congela a fila por 24 horas, notificando o coordenador e exibindo alerta no dashboard para evitar banimento definitivo.
+
+### Ciclo de Execução:
+```
+[pg_cron a cada 2 min]
+       │
+       ▼
+[Edge Function: processar-fila-whatsapp]
+       │
+       ├─ É horário comercial (08h às 20h Brasília)? ──(Não)──► Pausa até 08:00
+       ├─ Timelock ativo no banco? ──────────────────────(Sim)──► Fila congelada
+       ├─ Limite diário (60) atingido hoje? ─────────────(Sim)──► Pausa até amanhã
+       ├─ Jitter estocástico (pula 20% das vezes)? ──────(Sim)──► Pausa humana
+       │
+       ▼
+[Pega 1 mensagem pendente no banco]
+       │
+       ▼
+[Envia via Evolution Go com Composing proporcional]
+       │
+       ├─ Sucesso ──────► Marca 'enviado' + Incrementa contador diário
+       │                  Verifica se é o último do lote ➔ Notifica Coordenador
+       │
+       ├─ Erro 463 ─────► Ativa Timelock 24h + Alerta Coordenador
+       │
+       └─ Erro 500/Rede ─► Reagenda para 35 minutos (até 3 tentativas)
+```
+
+---
+
+## 🗄️ 6. Esquema do Banco de Dados (Supabase PostgreSQL)
+
+| Tabela | Finalidade | Políticas RLS |
+|---|---|---|
+| `crismandos` | Dados dos alunos (id, nome, telefone, valor_mensal) | Pública (`anon` e `authenticated`) |
+| `pagamentos` | Registro das contribuições (crismando_id, mes, ano, valor, data_pagamento) | Pública (`anon` e `authenticated`) |
+| `codigos_autenticacao` | Códigos únicos de 8 caracteres para validação de comprovantes | Pública (`anon` e `authenticated`) |
+| `usuarios_autenticados` | Contas de login dos coordenadores (email, senha_hash, salt, tentativas) | Restrita via `auth.js` |
+| `encontros_crisma` | Datas e temas dos encontros de catequese | Pública |
+| `frequencia_crisma` | Presenças/faltas de cada crismando por encontro | Pública |
+| `despesas_crisma` | Gastos e saídas do livro caixa | Pública |
+| `entradas_extras_crisma` | Taxas e doações do livro caixa | Pública |
+| `configuracoes_sistema` | JSON com ciclo catequético e `telefone_coordenador` | Pública (`Permitir tudo`) |
+| `fila_mensagens_whatsapp` | Fila de envio (lote_id, tipo_envio, telefone, mensagem, status, prioridade) | Pública (`Permitir tudo`) |
+| `controle_envios_diarios` | Contador diário de envios (limite 60) e flags de timelock | Pública (`Permitir tudo`) |
+
+---
+
+## 🤖 7. Regras Mandatórias para LLMs ao Modificar o Projeto
+
+1. **Preserve a simplicidade (KISS & YAGNI):** Nunca sugira migração para React, Next.js, Vite ou Tailwind a menos que explicitamente ordenado pelo usuário. O projeto funciona via arquivos estáticos diretos.
+2. **Preserve a Experiência do Usuário (UX):**
+   - Nunca altere a posição de botões existentes.
+   - Sempre mantenha os botões `[Marcar Todos]`, `[Desmarcar Todos]` e checkboxes individuais onde houver seleção de contatos.
+3. **Respeite o Banco e Paginação:** Ao buscar dados de `pagamentos`, sempre use busca paginada com `.range()` para superar o limite de 1000 registros do Supabase.
+4. **Proteção Anti-Ban é Sagrada:** Nunca reduza os delays para menos de 30s nem remova o teto de 60 msgs/dia em disparos automáticos.
+5. **Idioma Oficial:** Todo código de interface, comentários, mensagens de erro, alertas e relatórios devem ser em **Português do Brasil (PT-BR)**.

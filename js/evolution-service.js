@@ -300,13 +300,8 @@ function cancelarDisparoEmAndamento() {
   }
 }
 
-// Inicia disparo em lote em segundo plano (background worker da SPA)
+// Inicia disparo de cobrança em lote via Fila Backend Autônoma
 async function iniciarDisparoLote(mesFiltro, anoFiltro) {
-  if (window.disparoEmAndamento) {
-    alert("⚠️ Já existe um disparo em lote em andamento no momento.");
-    return;
-  }
-
   const selecionados = Array.from(document.querySelectorAll(".chk-devedor-item:checked"));
 
   if (selecionados.length === 0) {
@@ -314,79 +309,57 @@ async function iniciarDisparoLote(mesFiltro, anoFiltro) {
     return;
   }
 
-  if (!confirm(`Deseja iniciar o disparo para os ${selecionados.length} crismandos selecionados?\n\nO envio rodará em SEGUNDO PLANO na aplicação. Você poderá fechar esta janela, mudar de aba e registrar pagamentos livremente durante os envios.`)) {
+  if (!confirm(`Deseja agendar o envio para os ${selecionados.length} crismandos selecionados?\n\n🛡️ O envio será realizado pelo SERVIDOR em segundo plano (até 60 mensagens/dia em horário comercial).\n💻 Você poderá fechar esta janela, mudar de aba ou desligar o computador.`)) {
     return;
   }
 
-  window.disparoEmAndamento = true;
+  const supabaseClient = (typeof getSupabaseClient === 'function' ? getSupabaseClient() : null) || window.supabaseClient;
+  if (!supabaseClient) {
+    alert("❌ Erro: Conexão com o Supabase não encontrada.");
+    return;
+  }
 
-  // Fechar modal para permitir navegação livre pelo sistema
-  fecharModalCobranca();
-
-  // Exibir banner de controle no rodapé fixo
-  renderizarBannerDisparoBackground();
-
-  let enviadosComSucesso = 0;
-  let falhas = 0;
-  const total = selecionados.length;
-
-  for (let i = 0; i < total; i++) {
-    if (!window.disparoEmAndamento) {
-      console.log("🛑 Disparo interrompido pelo usuário.");
-      break;
-    }
-
-    // RENOVAR SESSÃO DO USUÁRIO A CADA MENSAGEM (KEEP-ALIVE)
-    if (window.auth && typeof window.auth.renovarSessao === "function") {
-      window.auth.renovarSessao();
-    }
-
-    const item = selecionados[i];
+  const loteId = crypto.randomUUID();
+  const registros = selecionados.map(item => {
     const nome = item.getAttribute("data-nome");
-    const tel = item.getAttribute("data-tel");
+    const tel = item.getAttribute("data-tel") || "";
     const mes = item.getAttribute("data-mes");
     const ano = item.getAttribute("data-ano");
+    const crismandoId = parseInt(item.value);
     const valor = parseFloat(item.getAttribute("data-valor")) || 10.00;
     const valorStr = valor.toFixed(2).replace(".", ",");
-
     const msg = `Olá, ${nome}. Passando para lembrar sobre a contribuição da Crisma referente ao mês de *${mes}/${ano}* (Valor: R$ ${valorStr}). Se você já efetuou o pagamento recentemente, por favor desconsidere este aviso.\n\n"O Senhor é o meu pastor; nada me faltará." - Salmo 23:1. Que Deus abençoe você e sua família! 🙏`;
 
-    atualizarBannerDisparo(i + 1, total, nome, 0);
+    return {
+      lote_id: loteId,
+      crismando_id: crismandoId,
+      nome_destinatario: nome,
+      telefone: tel,
+      tipo: 'cobranca',
+      tipo_envio: 'cobranca',
+      mensagem: msg,
+      mensagem_texto: msg,
+      status: 'pendente',
+      prioridade: 4,
+      tentativas: 0
+    };
+  });
 
-    const enviadoOk = await enviarTextoEvolutionGo(tel, msg);
+  try {
+    const { error } = await supabaseClient.from("fila_mensagens_whatsapp").insert(registros);
+    if (error) throw error;
 
-    if (enviadoOk) {
-      enviadosComSucesso++;
-    } else {
-      falhas++;
-      console.warn(`Disparo para ${nome} via Evolution Go falhou.`);
-    }
+    fecharModalCobranca();
 
-    // Intervalo Anti-Ban (15s a 45s) entre mensagens
-    if (i < total - 1 && window.disparoEmAndamento) {
-      const delaySegundos = Math.floor(Math.random() * (45 - 15 + 1)) + 15;
-      for (let s = delaySegundos; s > 0; s--) {
-        if (!window.disparoEmAndamento) break;
-        
-        // RENOVAR SESSÃO CONTINUAMENTE DURANTE A PAUSA
-        if (window.auth && typeof window.auth.renovarSessao === "function") {
-          window.auth.renovarSessao();
-        }
+    alert(`✅ ${registros.length} lembrete(s) de cobrança foram agendados na fila do servidor com sucesso!\n\n🛡️ O worker do Supabase processará os envios automaticamente respeitando as regras Anti-Ban (60/dia).\n📱 Ao concluir o lote, o coordenador será notificado no WhatsApp.\n💻 Você pode fechar o sistema tranquilamente.`);
 
-        atualizarBannerDisparo(i + 1, total, nome, s);
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-      }
-    }
+    if (typeof carregarMetricasFila === 'function') carregarMetricasFila();
+    if (typeof carregarTabelaMensagensFila === 'function') carregarTabelaMensagensFila();
+
+  } catch (err) {
+    console.error("Erro ao enfileirar lembretes de cobrança:", err);
+    alert(`❌ Erro ao agendar lembretes: ${err.message || err}`);
   }
-
-  window.disparoEmAndamento = false;
-
-  if (enviadosComSucesso + falhas > 0) {
-    const msgFinal = `🏁 Disparo de lembretes em segundo plano concluído!\n\n✅ Sucessos: ${enviadosComSucesso}\n⚠️ Falhas: ${falhas}`;
-    alert(msgFinal);
-  }
-
-  removerBannerDisparo();
 }
 
 // Renderiza a barra/banner flutuante de progresso em background no rodapé da SPA
@@ -452,136 +425,52 @@ async function dispararRecibosPendentesDoDia() {
     return;
   }
 
-  if (window.disparoEmAndamento) {
-    alert("⚠️ Já existe um disparo em lote em andamento no momento.");
-    return;
-  }
-
   const qtd = recibosPendentesEncontro.length;
-  if (!confirm(`Deseja disparar os ${qtd} recibo(s) acumulados do encontro?\n\nOs recibos serão enviados via WhatsApp em SEGUNDO PLANO com mecanismo Anti-Ban.`)) {
+  if (!confirm(`Deseja agendar os ${qtd} recibo(s) acumulados do encontro?\n\n🛡️ O envio será realizado pelo SERVIDOR em segundo plano com proteção Anti-Ban.\n💻 Você pode fechar o sistema a qualquer momento.`)) {
     return;
   }
-
-  window.disparoEmAndamento = true;
-  renderizarBannerDisparoBackground();
 
   const supabaseClient = (typeof getSupabaseClient === 'function' ? getSupabaseClient() : null) || window.supabaseClient;
-  let enviadosOk = 0;
-  let falhas = 0;
-  let reagendados463 = 0;
+  if (!supabaseClient) {
+    alert("❌ Erro de conexão com o banco de dados.");
+    return;
+  }
 
-  // Recarregar do Supabase para garantir a fila mais atual
-  await carregarRecibosPendentesLocal();
-  const listaFila = [...recibosPendentesEncontro];
-
-  for (let i = 0; i < listaFila.length; i++) {
-    if (!window.disparoEmAndamento) {
-      console.log("🛑 Disparo de recibos interrompido pelo usuário.");
-      break;
-    }
-
-    if (window.auth && typeof window.auth.renovarSessao === "function") {
-      window.auth.renovarSessao();
-    }
-
-    const item = listaFila[i];
+  const loteId = crypto.randomUUID();
+  const registros = recibosPendentesEncontro.map(item => {
     const nome = item.crismando ? item.crismando.nome : "Crismando";
     const tel = item.crismando ? item.crismando.telefone : "";
+    return {
+      lote_id: loteId,
+      crismando_id: item.crismando?.id || null,
+      nome_destinatario: nome,
+      telefone: tel,
+      tipo: 'recibo',
+      tipo_envio: 'recibo',
+      mensagem: item.mensagemTexto,
+      mensagem_texto: item.mensagemTexto,
+      status: 'pendente',
+      prioridade: 3,
+      tentativas: 0
+    };
+  });
 
-    atualizarBannerDisparo(i + 1, listaFila.length, nome, 0);
+  try {
+    const { error } = await supabaseClient.from("fila_mensagens_whatsapp").insert(registros);
+    if (error) throw error;
 
-    // Marcar como processando no Supabase
-    if (supabaseClient && item.id) {
-      await supabaseClient.from("fila_mensagens_whatsapp").update({ status: "processando" }).eq("id", item.id);
-    }
-
-    let resultadoEnvio = { ok: false };
-    if (tel) {
-      const res = await enviarTextoEvolutionGo(tel, item.mensagemTexto);
-      if (typeof res === 'boolean') {
-        resultadoEnvio = { ok: res };
-      } else if (res && typeof res === 'object') {
-        resultadoEnvio = res;
-      }
-    }
-
-    if (resultadoEnvio.ok) {
-      enviadosOk++;
-      if (supabaseClient && item.id) {
-        await supabaseClient.from("fila_mensagens_whatsapp").update({ 
-          status: "enviado", 
-          enviado_em: new Date().toISOString() 
-        }).eq("id", item.id);
-      }
-      const idx = recibosPendentesEncontro.indexOf(item);
-      if (idx > -1) recibosPendentesEncontro.splice(idx, 1);
-    } else if (resultadoEnvio.isError463) {
-      // WhatsApp recusou envio imediato (Erro 463): agendar para reenvio automático em 1 hora
-      const dataReagendada = new Date(Date.now() + 1 * 60 * 60 * 1000).toISOString();
-      console.warn(`⏳ Mensagem para ${tel} reagendada (Erro 463) para reenvio em 1h (${dataReagendada})`);
-      
-      if (supabaseClient && item.id) {
-        const tentativasAtuais = (item.tentativas || 0) + 1;
-        await supabaseClient.from("fila_mensagens_whatsapp").update({ 
-          status: "reagendado_463",
-          agendado_para: dataReagendada,
-          tentativas: tentativasAtuais,
-          erro_log: "WhatsApp recusou envio imediato (463). Reagendado para 1 hora."
-        }).eq("id", item.id);
-      }
-      reagendados463++;
-    } else if (resultadoEnvio.errorCode >= 500 || resultadoEnvio.isTimeout) {
-      // Instabilidade/Erro no Servidor WhatsApp (Erro 500+): agendar para reenvio automático em 35 minutos
-      const dataReagendada = new Date(Date.now() + 35 * 60 * 1000).toISOString();
-      console.warn(`⏳ Mensagem para ${tel} reagendada (Erro 500 / Servidor) para reenvio em 35min (${dataReagendada})`);
-      
-      if (supabaseClient && item.id) {
-        const tentativasAtuais = (item.tentativas || 0) + 1;
-        await supabaseClient.from("fila_mensagens_whatsapp").update({ 
-          status: "reagendado_500",
-          agendado_para: dataReagendada,
-          tentativas: tentativasAtuais,
-          erro_log: `Erro de servidor (${resultadoEnvio.errorCode || 500}): ${resultadoEnvio.mensagemErro || "Servidor instável"}. Reagendado para 35min.`
-        }).eq("id", item.id);
-      }
-      reagendados463++;
-    } else {
-      falhas++;
-      if (supabaseClient && item.id) {
-        await supabaseClient.from("fila_mensagens_whatsapp").update({ 
-          status: "falha_definitiva", 
-          erro_log: tel ? (resultadoEnvio.mensagemErro || "Erro ao disparar via Evolution Go") : "Sem telefone cadastrado" 
-        }).eq("id", item.id);
-      }
-    }
-
+    recibosPendentesEncontro = [];
     atualizarContadorRecibosPendentes();
 
-    if (i < listaFila.length - 1 && window.disparoEmAndamento) {
-      const delaySegundos = Math.floor(Math.random() * (45 - 15 + 1)) + 15;
-      for (let s = delaySegundos; s > 0; s--) {
-        if (!window.disparoEmAndamento) break;
-        if (window.auth && typeof window.auth.renovarSessao === "function") {
-          window.auth.renovarSessao();
-        }
-        atualizarBannerDisparo(i + 1, listaFila.length, nome, s);
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-      }
-    }
-  }
+    alert(`✅ ${registros.length} recibo(s) agendados com sucesso na fila do servidor!\n\n🛡️ Os comprovantes serão enviados em segundo plano.\n📱 O coordenador será notificado no WhatsApp ao término do lote.`);
 
-  window.disparoEmAndamento = false;
-  removerBannerDisparo();
+    if (typeof carregarMetricasFila === 'function') carregarMetricasFila();
+    if (typeof carregarTabelaMensagensFila === 'function') carregarTabelaMensagensFila();
 
-  let msgResultado = `🏁 Disparo dos recibos do encontro concluído!\n\n✅ Enviados com sucesso: ${enviadosOk}`;
-  if (reagendados463 > 0) {
-    msgResultado += `\n⏳ Reagendados automaticamente (Erro 463 ou 500): ${reagendados463}`;
+  } catch (err) {
+    console.error("Erro ao agendar recibos:", err);
+    alert(`❌ Erro ao agendar recibos: ${err.message || err}`);
   }
-  if (falhas > 0) {
-    msgResultado += `\n❌ Não foi possível entregar: ${falhas}`;
-  }
-  alert(msgResultado);
-  await carregarRecibosPendentesLocal();
 }
 
 // =========================================================================
@@ -692,125 +581,73 @@ async function iniciarDisparoAvisosEmLote() {
 
   const listaCrismandosAlvo = crismandos.filter(c => idsSelecionados.includes(c.id.toString()));
 
-  if (!confirm(`Confirmar o envio do aviso para ${listaCrismandosAlvo.length} crismando(s)?\n\n🛡️ Proteção Anti-Ban Meta ativada (delays randômicos e pausas por lote).`)) {
+  if (!confirm(`Confirmar o agendamento do aviso para ${listaCrismandosAlvo.length} crismando(s)?\n\n🛡️ O envio será realizado pelo SERVIDOR em segundo plano (até 60 mensagens/dia em horário comercial).\n💻 Você pode fechar o sistema ou desligar o computador a qualquer momento.`)) {
     return;
   }
 
-  window.disparoAvisosEmAndamento = true;
-  window.disparoAvisosPausado = false;
-  window.cancelarDisparoAvisosFlag = false;
+  const supabaseClient = (typeof getSupabaseClient === 'function' ? getSupabaseClient() : null) || window.supabaseClient;
+  if (!supabaseClient) {
+    alert("❌ Erro de conexão com o banco de dados.");
+    return;
+  }
 
-  document.getElementById("btnIniciarDisparoAvisos").style.display = "none";
-  document.getElementById("btnPausarDisparoAvisos").style.display = "inline-block";
-  document.getElementById("btnCancelarDisparoAvisos").style.display = "inline-block";
-  document.getElementById("containerProgressoAvisos").style.display = "block";
-
-  const logBox = document.getElementById("logDisparoAvisos");
-  if (logBox) logBox.innerHTML = `[${new Date().toLocaleTimeString()}] 🚀 Iniciando disparo de avisos em lote...\n`;
-
-  let sucessos = 0;
-  let falhas = 0;
-  const total = listaCrismandosAlvo.length;
-
-  document.getElementById("metricTotalAvisos").innerText = total;
-  document.getElementById("metricSucessosAvisos").innerText = "0";
-  document.getElementById("metricFalhasAvisos").innerText = "0";
-
-  for (let i = 0; i < total; i++) {
-    if (window.cancelarDisparoAvisosFlag) {
-      if (logBox) logBox.innerHTML += `[${new Date().toLocaleTimeString()}] 🛑 Disparo cancelado pelo usuário.\n`;
-      break;
-    }
-
-    while (window.disparoAvisosPausado) {
-      document.getElementById("tituloProgressoAvisos").innerText = "⏸️ Disparo Pausado";
-      document.getElementById("metricTimerAvisos").innerText = "Pausado";
-      await new Promise(r => setTimeout(r, 1000));
-      if (window.cancelarDisparoAvisosFlag) break;
-    }
-
-    if (window.cancelarDisparoAvisosFlag) break;
-    document.getElementById("tituloProgressoAvisos").innerText = "📡 Disparando Avisos via WhatsApp...";
-
-    const crismando = listaCrismandosAlvo[i];
-    const tel = crismando.telefone;
-    const nome = crismando.nome;
-    const valor = (crismando.valor_mensal || 10.00).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const loteId = crypto.randomUUID();
+  const registros = listaCrismandosAlvo.map(c => {
+    const tel = c.telefone || "";
+    const nome = c.nome;
+    const valor = (c.valor_mensal || 10.00).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
     const msgPersonalizada = templateMensagem
       .replace(/\{nome\}/g, nome)
-      .replace(/\{telefone\}/g, tel || "")
+      .replace(/\{telefone\}/g, tel)
       .replace(/\{valor\}/g, valor);
 
-    const pct = Math.round(((i) / total) * 100);
-    document.getElementById("porcentagemProgressoAvisos").innerText = `${pct}%`;
-    document.getElementById("barraProgressoAvisos").style.width = `${pct}%`;
+    return {
+      lote_id: loteId,
+      crismando_id: c.id,
+      nome_destinatario: nome,
+      telefone: tel,
+      tipo: 'aviso_lote',
+      tipo_envio: 'aviso_lote',
+      mensagem: msgPersonalizada,
+      mensagem_texto: msgPersonalizada,
+      status: 'pendente',
+      prioridade: 5,
+      tentativas: 0
+    };
+  });
 
-    if (window.auth && typeof window.auth.renovarSessao === "function") {
-      window.auth.renovarSessao();
-    }
+  try {
+    const { error } = await supabaseClient.from("fila_mensagens_whatsapp").insert(registros);
+    if (error) throw error;
 
+    // Atualiza log visual da aba de avisos
+    const containerProgresso = document.getElementById("containerProgressoAvisos");
+    const logBox = document.getElementById("logDisparoAvisos");
+    if (containerProgresso) containerProgresso.style.display = "block";
     if (logBox) {
-      logBox.innerHTML += `[${new Date().toLocaleTimeString()}] 📱 Enviando (${i + 1}/${total}) para ${nome}... `;
-      logBox.scrollTop = logBox.scrollHeight;
+      logBox.innerHTML = `[${new Date().toLocaleTimeString()}] 🚀 ${registros.length} aviso(s) agendados com sucesso na fila do servidor!\n[${new Date().toLocaleTimeString()}] 🛡️ Regra Anti-Ban ativa: até 60 envios/dia em horário comercial (08:00 às 20:00).\n[${new Date().toLocaleTimeString()}] 📱 O coordenador receberá notificação no WhatsApp ao finalizar o lote.\n[${new Date().toLocaleTimeString()}] 💻 Você pode fechar o navegador tranquilamente.`;
     }
+    const elPct = document.getElementById("porcentagemProgressoAvisos");
+    if (elPct) elPct.innerText = "100%";
+    const elBarra = document.getElementById("barraProgressoAvisos");
+    if (elBarra) elBarra.style.width = "100%";
+    const elTotal = document.getElementById("metricTotalAvisos");
+    if (elTotal) elTotal.innerText = registros.length;
+    const elTimer = document.getElementById("metricTimerAvisos");
+    if (elTimer) elTimer.innerText = "Fila Ativa";
+    const elTitulo = document.getElementById("tituloProgressoAvisos");
+    if (elTitulo) elTitulo.innerText = "✅ Agendado no Servidor!";
 
-    let ok = false;
-    if (tel) {
-      ok = await enviarTextoEvolutionGo(tel, msgPersonalizada);
-    }
+    alert(`✅ ${registros.length} aviso(s) foram agendados na fila do servidor com sucesso!\n\n🛡️ O envio será realizado a até 60 mensagens por dia no horário comercial (08:00 às 20:00).\n📱 Ao concluir o lote de 180 crismandos, o coordenador receberá o relatório no WhatsApp.\n💻 Você pode fechar o sistema tranquilamente.`);
 
-    if (ok) {
-      sucessos++;
-      document.getElementById("metricSucessosAvisos").innerText = sucessos;
-      if (logBox) logBox.innerHTML += `✅ OK!\n`;
-    } else {
-      falhas++;
-      document.getElementById("metricFalhasAvisos").innerText = falhas;
-      if (logBox) logBox.innerHTML += `❌ FALHA!\n`;
-    }
+    if (typeof carregarMetricasFila === 'function') carregarMetricasFila();
+    if (typeof carregarTabelaMensagensFila === 'function') carregarTabelaMensagensFila();
 
-    if (i < total - 1 && !window.cancelarDisparoAvisosFlag) {
-      if ((i + 1) % 10 === 0) {
-        const tempoPausaLote = 120;
-        if (logBox) {
-          logBox.innerHTML += `[${new Date().toLocaleTimeString()}] 🛡️ Pausa de descanso Anti-Ban Meta (10 mensagens). Aguardando ${tempoPausaLote}s...\n`;
-          logBox.scrollTop = logBox.scrollHeight;
-        }
-
-        for (let s = tempoPausaLote; s > 0; s--) {
-          if (window.cancelarDisparoAvisosFlag) break;
-          document.getElementById("metricTimerAvisos").innerText = `${s}s (Pausa de Lote)`;
-          await new Promise(r => setTimeout(r, 1000));
-        }
-      } else {
-        const delaySegundos = Math.floor(Math.random() * (45 - 15 + 1)) + 15;
-        for (let s = delaySegundos; s > 0; s--) {
-          if (window.cancelarDisparoAvisosFlag) break;
-          document.getElementById("metricTimerAvisos").innerText = `${s}s`;
-          await new Promise(r => setTimeout(r, 1000));
-        }
-      }
-    }
+  } catch (err) {
+    console.error("Erro ao agendar avisos:", err);
+    alert(`❌ Erro ao agendar avisos: ${err.message || err}`);
   }
-
-  const pctFinal = 100;
-  document.getElementById("porcentagemProgressoAvisos").innerText = `${pctFinal}%`;
-  document.getElementById("barraProgressoAvisos").style.width = `${pctFinal}%`;
-  document.getElementById("metricTimerAvisos").innerText = "Concluído";
-  document.getElementById("tituloProgressoAvisos").innerText = "🏁 Disparo Concluído!";
-
-  window.disparoAvisosEmAndamento = false;
-  window.disparoAvisosPausado = false;
-  window.cancelarDisparoAvisosFlag = false;
-
-  document.getElementById("btnIniciarDisparoAvisos").style.display = "inline-block";
-  document.getElementById("btnPausarDisparoAvisos").style.display = "none";
-  document.getElementById("btnCancelarDisparoAvisos").style.display = "none";
-
-  if (logBox) logBox.innerHTML += `[${new Date().toLocaleTimeString()}] 🏁 Lote finalizado! ✅ Sucessos: ${sucessos} | ⚠️ Falhas: ${falhas}\n`;
-
-  alert(`🏁 Disparo de avisos concluído!\n\n✅ Enviados com sucesso: ${sucessos}\n⚠️ Falhas ou sem telefone: ${falhas}`);
 }
 
 function pausarDisparoAvisos() {

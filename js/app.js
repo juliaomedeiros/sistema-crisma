@@ -154,6 +154,10 @@ function alternarAba(tabId) {
     if (typeof atualizarPreviewAviso === "function") {
       atualizarPreviewAviso();
     }
+  } else if (tabId === "tabEvolution") {
+    if (typeof inicializarDashboardFila === "function") {
+      inicializarDashboardFila();
+    }
   }
 }
 
