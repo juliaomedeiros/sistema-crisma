@@ -6,6 +6,102 @@ const ORDEM_MESES = [
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
 ];
 
+// ─────────────────────────────────────────────
+// NORMALIZAÇÃO E FORMATAÇÃO DE TELEFONE (DDD 83 PADRÃO)
+// ─────────────────────────────────────────────
+
+/**
+ * Normaliza qualquer formato de telefone brasileiro para o formato internacional do WhatsApp (ex: 5583999999999)
+ * @param {string|number} telefone 
+ * @param {string} dddPadrao DDD padrão caso o número não possua (Padrão: 83 - Paraíba)
+ * @returns {string} Número normalizado com DDI 55
+ */
+function normalizarTelefoneWhatsApp(telefone, dddPadrao = "83") {
+  if (!telefone) return "";
+  let numLimpo = String(telefone).replace(/\D/g, "");
+  if (!numLimpo) return "";
+
+  // Remove zeros à esquerda caso o usuário tenha digitado ex: 083...
+  numLimpo = numLimpo.replace(/^0+/, "");
+
+  // Caso 1: Já completo com DDI 55 (ex: 5583991846529 ou 558388888888 - 12 a 13 dígitos)
+  if (numLimpo.startsWith("55") && (numLimpo.length === 12 || numLimpo.length === 13)) {
+    return numLimpo;
+  }
+
+  // Caso 2: Já possui DDD (ex: 31991846529, 83991846529, 81979152181 - 10 ou 11 dígitos)
+  if (numLimpo.length === 10 || numLimpo.length === 11) {
+    return "55" + numLimpo;
+  }
+
+  // Caso 3: Número local sem DDD (ex: 986016110 ou 86016110 - 8 ou 9 dígitos) -> Injeta DDD padrão 83
+  if (numLimpo.length === 8 || numLimpo.length === 9) {
+    return "55" + dddPadrao + numLimpo;
+  }
+
+  // Caso 4: Fallback resiliente
+  return numLimpo.startsWith("55") ? numLimpo : "55" + numLimpo;
+}
+
+/**
+ * Formata telefone para exibição amigável: (XX) 9XXXX-XXXX ou (83) 9XXXX-XXXX
+ */
+function formatarTelefoneExibicao(telefone, dddPadrao = "83") {
+  if (!telefone) return "";
+  let numLimpo = String(telefone).replace(/\D/g, "").replace(/^0+/, "");
+  if (!numLimpo) return "";
+
+  // Se já tiver DDI 55, remove para formatar visualmente
+  if (numLimpo.startsWith("55") && (numLimpo.length === 12 || numLimpo.length === 13)) {
+    numLimpo = numLimpo.substring(2);
+  }
+
+  // Se tem apenas 8 ou 9 dígitos, injeta o DDD padrão
+  if (numLimpo.length === 8 || numLimpo.length === 9) {
+    numLimpo = dddPadrao + numLimpo;
+  }
+
+  if (numLimpo.length === 11) {
+    return `(${numLimpo.substring(0, 2)}) ${numLimpo.substring(2, 7)}-${numLimpo.substring(7)}`;
+  } else if (numLimpo.length === 10) {
+    return `(${numLimpo.substring(0, 2)}) ${numLimpo.substring(2, 6)}-${numLimpo.substring(6)}`;
+  }
+
+  return telefone;
+}
+
+/**
+ * Máscara inteligente para inputs de telefone no DOM
+ */
+function aplicarMascaraTelefoneDOM(input) {
+  if (!input) return;
+
+  input.addEventListener("input", function(e) {
+    let val = e.target.value.replace(/\D/g, "");
+    if (val.length > 11) val = val.substring(0, 11);
+
+    if (val.length === 0) {
+      e.target.value = "";
+    } else if (val.length <= 2) {
+      e.target.value = `(${val}`;
+    } else if (val.length <= 6) {
+      e.target.value = `(${val.substring(0, 2)}) ${val.substring(2)}`;
+    } else if (val.length <= 10) {
+      e.target.value = `(${val.substring(0, 2)}) ${val.substring(2, 6)}-${val.substring(6)}`;
+    } else {
+      e.target.value = `(${val.substring(0, 2)}) ${val.substring(2, 7)}-${val.substring(7, 11)}`;
+    }
+  });
+
+  input.addEventListener("blur", function(e) {
+    let val = e.target.value.replace(/\D/g, "");
+    if (val.length === 8 || val.length === 9) {
+      // Se o usuário digitou sem DDD, injeta o (83) automaticamente ao sair do campo
+      e.target.value = formatarTelefoneExibicao(val, "83");
+    }
+  });
+}
+
 // ✅ Extrai mes e ano referentes à contribuição mensal (p.mes e p.ano)
 function extrairMesAno(p) {
   if (!p) return { mes: null, ano: null };
@@ -543,17 +639,21 @@ function validarTelefones() {
 
   let html = `<table border="1" cellpadding="6" style="width:100%;border-collapse:collapse;font-size:13px;">
     <thead style="background:#2c3e50;color:white;">
-      <tr><th>Nome</th><th>Telefone</th><th>Status</th></tr>
+      <tr><th>Nome</th><th>Telefone Cadastrado</th><th>Telefone Formatado (WhatsApp)</th><th>Status</th></tr>
     </thead><tbody>`;
 
   crismandos.forEach((c) => {
     const tel = (c.telefone || "").replace(/\D/g, "");
-    const valido = tel.length >= 10 && tel.length <= 11;
+    const valido = tel.length >= 8 && tel.length <= 13;
+    const formatadoVisual = formatarTelefoneExibicao(c.telefone, "83");
+    const normalizadoWhats = normalizarTelefoneWhatsApp(c.telefone, "83");
+    
     html += `
       <tr style="${valido ? "" : "background:#fff0f0;"}">
-        <td>${c.nome}</td>
-        <td>${c.telefone || "-"}</td>
-        <td>${valido ? "✅ OK" : "⚠️ Verificar"}</td>
+        <td><strong>${c.nome}</strong></td>
+        <td>${c.telefone || "<span style='color:#e74c3c;'>Não cadastrado</span>"}</td>
+        <td><code>${valido ? `${formatadoVisual} (${normalizadoWhats})` : "-"}</code></td>
+        <td>${valido ? "✅ Válido" : "⚠️ Inválido"}</td>
       </tr>`;
   });
 
