@@ -12,9 +12,20 @@ window.detalhesDisparoAtual = {
 // Envio de Texto via Supabase Edge Function (Proxy Seguro) com Fallback
 async function enviarTextoEvolutionGo(telefone, mensagem) {
   try {
-    const numLimpo = telefone.replace(/\D/g, "");
-    if (!numLimpo) {
-      console.warn("⚠️ Telefone inválido para envio.");
+    const normalizarFn = (typeof normalizarTelefoneWhatsApp === 'function') 
+      ? normalizarTelefoneWhatsApp 
+      : (t) => {
+          let n = String(t || '').replace(/\D/g, '').replace(/^0+/, '');
+          if (!n) return '';
+          if (n.startsWith('55') && (n.length === 12 || n.length === 13)) return n;
+          if (n.length === 10 || n.length === 11) return '55' + n;
+          if (n.length === 8 || n.length === 9) return '5583' + n;
+          return n.startsWith('55') ? n : '55' + n;
+        };
+
+    const numFormatado = normalizarFn(telefone, "83");
+    if (!numFormatado || numFormatado.length < 12) {
+      console.warn("⚠️ Telefone inválido para envio:", telefone, "->", numFormatado);
       return false;
     }
 
@@ -24,15 +35,15 @@ async function enviarTextoEvolutionGo(telefone, mensagem) {
     if (supabaseInst && supabaseInst.functions) {
       try {
         const { data, error } = await supabaseInst.functions.invoke("enviar-whatsapp", {
-          body: { telefone: numLimpo, mensagem: mensagem }
+          body: { telefone: numFormatado, mensagem: mensagem }
         });
 
         if (!error && data) {
           if (data.ok) {
-            console.log(`✅ [Edge Function] Mensagem enviada com sucesso para ${numLimpo}`);
+            console.log(`✅ [Edge Function] Mensagem enviada com sucesso para ${numFormatado}`);
             return { ok: true };
           } else {
-            console.warn(`⚠️ [Edge Function] Recusa de envio para ${numLimpo}:`, data.error || data);
+            console.warn(`⚠️ [Edge Function] Recusa de envio para ${numFormatado}:`, data.error || data);
             return {
               ok: false,
               isError463: Boolean(data.isError463 || data.errorCode === 463),
@@ -60,7 +71,6 @@ async function enviarTextoEvolutionGo(telefone, mensagem) {
       return false;
     }
 
-    const numFormatado = numLimpo.startsWith("55") ? numLimpo : "55" + numLimpo;
     const urlPrimary = `${baseUrl.replace(/\/$/, "")}/send/text`;
 
     const payload = {

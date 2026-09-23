@@ -73,8 +73,19 @@ serve(async (req) => {
       );
     }
 
-    const numLimpo = telefone.replace(/\D/g, "");
-    const numFormatado = numLimpo.startsWith("55") ? numLimpo : "55" + numLimpo;
+    // Normalização Inteligente para WhatsApp (DDD 83 Padrão da Paraíba se ausente)
+    let numLimpo = String(telefone || "").replace(/\D/g, "").replace(/^0+/, "");
+    let numFormatado = numLimpo;
+
+    if (numLimpo.startsWith("55") && (numLimpo.length === 12 || numLimpo.length === 13)) {
+      numFormatado = numLimpo;
+    } else if (numLimpo.length === 10 || numLimpo.length === 11) {
+      numFormatado = `55${numLimpo}`;
+    } else if (numLimpo.length === 8 || numLimpo.length === 9) {
+      numFormatado = `5583${numLimpo}`;
+    } else {
+      numFormatado = numLimpo.startsWith("55") ? numLimpo : `55${numLimpo}`;
+    }
 
     const payload = {
       instance: EVOLUTION_INSTANCE,

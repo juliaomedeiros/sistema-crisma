@@ -43,6 +43,10 @@ document.addEventListener('DOMContentLoaded', async function() {
       if (typeof inicializarMóduloExcel === 'function') {
         inicializarMóduloExcel();
       }
+      if (typeof aplicarMascaraTelefoneDOM === 'function') {
+        aplicarMascaraTelefoneDOM(document.getElementById("novoTelefone"));
+        aplicarMascaraTelefoneDOM(document.getElementById("editTelefone"));
+      }
       restaurarAbaSalva();
       adicionarBotaoLogout();
       adicionarInfoUsuario();

@@ -69,9 +69,12 @@ async function processarArquivoExcel(event) {
         continue;
       }
 
+      const formatarFn = typeof formatarTelefoneExibicao === 'function' ? formatarTelefoneExibicao : (t) => t;
+      const telFormatado = telRaw ? formatarFn(telRaw, "83") : "";
+
       novosCandidatos.push({
         nome: nomeRaw,
-        telefone: telRaw,
+        telefone: telFormatado,
         valor_mensal: valorFinal
       });
     }

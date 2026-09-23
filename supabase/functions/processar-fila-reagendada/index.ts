@@ -68,8 +68,18 @@ serve(async (req) => {
     for (const item of mensagens) {
       if (!item.telefone || !item.mensagem_texto) continue;
 
-      const numLimpo = item.telefone.replace(/\D/g, "");
-      const numFormatado = numLimpo.startsWith("55") ? numLimpo : `55${numLimpo}`;
+      let numLimpo = String(item.telefone || "").replace(/\D/g, "").replace(/^0+/, "");
+      let numFormatado = numLimpo;
+
+      if (numLimpo.startsWith("55") && (numLimpo.length === 12 || numLimpo.length === 13)) {
+        numFormatado = numLimpo;
+      } else if (numLimpo.length === 10 || numLimpo.length === 11) {
+        numFormatado = `55${numLimpo}`;
+      } else if (numLimpo.length === 8 || numLimpo.length === 9) {
+        numFormatado = `5583${numLimpo}`;
+      } else {
+        numFormatado = numLimpo.startsWith("55") ? numLimpo : `55${numLimpo}`;
+      }
 
       await supabase.from("fila_mensagens_whatsapp").update({ status: "processando" }).eq("id", item.id);
 

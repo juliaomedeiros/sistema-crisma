@@ -309,8 +309,15 @@ function baixarComprovanteIOSFallback(imgData, dadosComprovante, callback) {
                 </a>
                 <script>
                     function abrirWhatsApp() {
-                        const telefone = '${dadosComprovante.crismando.telefone.replace(/\D/g, '')}';
-                        const telefoneFormatado = telefone.startsWith('55') ? telefone : '55' + telefone;
+                        const telRaw = '${dadosComprovante.crismando.telefone || ''}';
+                        const normalizarFn = (typeof normalizarTelefoneWhatsApp === 'function') ? normalizarTelefoneWhatsApp : (t) => {
+                            let n = String(t || '').replace(/\D/g, '').replace(/^0+/, '');
+                            if (n.startsWith('55') && (n.length === 12 || n.length === 13)) return n;
+                            if (n.length === 10 || n.length === 11) return '55' + n;
+                            if (n.length === 8 || n.length === 9) return '5583' + n;
+                            return n.startsWith('55') ? n : '55' + n;
+                        };
+                        const telefoneFormatado = normalizarFn(telRaw, '83');
                         const mensagem = encodeURIComponent('🙏 Comprovante de pagamento da Crisma 2025 - ${dadosComprovante.crismando.nome}');
                         
                         // Tentar abrir app do WhatsApp primeiro
@@ -421,8 +428,15 @@ function baixarComprovanteAndroidFallback(imgData, dadosComprovante, callback) {
                 </a>
                 <script>
                     function abrirWhatsApp() {
-                        const telefone = '${dadosComprovante.crismando.telefone.replace(/\D/g, '')}';
-                        const telefoneFormatado = telefone.startsWith('55') ? telefone : '55' + telefone;
+                        const telRaw = '${dadosComprovante.crismando.telefone || ''}';
+                        const normalizarFn = (typeof normalizarTelefoneWhatsApp === 'function') ? normalizarTelefoneWhatsApp : (t) => {
+                            let n = String(t || '').replace(/\D/g, '').replace(/^0+/, '');
+                            if (n.startsWith('55') && (n.length === 12 || n.length === 13)) return n;
+                            if (n.length === 10 || n.length === 11) return '55' + n;
+                            if (n.length === 8 || n.length === 9) return '5583' + n;
+                            return n.startsWith('55') ? n : '55' + n;
+                        };
+                        const telefoneFormatado = normalizarFn(telRaw, '83');
                         const mensagem = encodeURIComponent('🙏 Comprovante de pagamento da Crisma 2025 - ${dadosComprovante.crismando.nome}');
                         
                         // Tentar abrir app do WhatsApp primeiro
@@ -445,8 +459,14 @@ function baixarComprovanteAndroidFallback(imgData, dadosComprovante, callback) {
 
 // NOVA FUNÇÃO: Abrir WhatsApp no Android
 function abrirWhatsAppAndroid(dadosComprovante) {
-    const telefone = dadosComprovante.crismando.telefone.replace(/\D/g, '');
-    const telefoneFormatado = telefone.startsWith('55') ? telefone : '55' + telefone;
+    const normalizarFn = (typeof normalizarTelefoneWhatsApp === 'function') ? normalizarTelefoneWhatsApp : (t) => {
+        let n = String(t || '').replace(/\D/g, '').replace(/^0+/, '');
+        if (n.startsWith('55') && (n.length === 12 || n.length === 13)) return n;
+        if (n.length === 10 || n.length === 11) return '55' + n;
+        if (n.length === 8 || n.length === 9) return '5583' + n;
+        return n.startsWith('55') ? n : '55' + n;
+    };
+    const telefoneFormatado = normalizarFn(dadosComprovante.crismando.telefone, '83');
     const mensagem = encodeURIComponent(`🙏 Comprovante de pagamento da Crisma 2025 - ${dadosComprovante.crismando.nome}`);
     
     // Tentar app nativo primeiro
@@ -479,10 +499,17 @@ function enviarComprovanteAutomatico() {
     }
     
     const crismando = window.dadosComprovanteAtual.crismando;
-    const telefone = crismando.telefone.replace(/\D/g, '');
+    const normalizarFn = (typeof normalizarTelefoneWhatsApp === 'function') ? normalizarTelefoneWhatsApp : (t) => {
+        let n = String(t || '').replace(/\D/g, '').replace(/^0+/, '');
+        if (n.startsWith('55') && (n.length === 12 || n.length === 13)) return n;
+        if (n.length === 10 || n.length === 11) return '55' + n;
+        if (n.length === 8 || n.length === 9) return '5583' + n;
+        return n.startsWith('55') ? n : '55' + n;
+    };
+    const telefoneFormatado = normalizarFn(crismando.telefone, '83');
     
-    if (!telefone || telefone.length < 10) {
-        alert(`❌ Telefone inválido para ${crismando.nome}!\n\nTelefone cadastrado: ${crismando.telefone}\n\nPor favor, verifique o número na tabela.`);
+    if (!telefoneFormatado || telefoneFormatado.length < 12) {
+        alert(`❌ Telefone inválido para ${crismando.nome}!\n\nTelefone cadastrado: ${crismando.telefone || 'Sem telefone'}\n\nPor favor, verifique o número na tabela.`);
         return;
     }
     
@@ -669,7 +696,14 @@ function criarModalInstrucoes(nomeCrismando, instrucoes) {
 
 // NOVA FUNÇÃO: Abrir WhatsApp Web (para desktop)
 function abrirWhatsAppWeb(telefone, crismando) {
-    const telefoneFormatado = telefone.startsWith('55') ? telefone : '55' + telefone;
+    const normalizarFn = (typeof normalizarTelefoneWhatsApp === 'function') ? normalizarTelefoneWhatsApp : (t) => {
+        let n = String(t || '').replace(/\D/g, '').replace(/^0+/, '');
+        if (n.startsWith('55') && (n.length === 12 || n.length === 13)) return n;
+        if (n.length === 10 || n.length === 11) return '55' + n;
+        if (n.length === 8 || n.length === 9) return '5583' + n;
+        return n.startsWith('55') ? n : '55' + n;
+    };
+    const telefoneFormatado = normalizarFn(telefone || crismando.telefone, '83');
     const mensagem = encodeURIComponent(`🙏 Comprovante de pagamento da Crisma 2025 - ${crismando.nome}`);
     const url = `https://wa.me/${telefoneFormatado}?text=${mensagem}`;
     
@@ -755,13 +789,19 @@ function abrirWhatsAppComTexto() {
         return;
     }
 
-    let telefone = crismando?.telefone ? crismando.telefone.replace(/\D/g, '') : '';
-    if (!telefone) {
+    const normalizarFn = (typeof normalizarTelefoneWhatsApp === 'function') ? normalizarTelefoneWhatsApp : (t) => {
+        let n = String(t || '').replace(/\D/g, '').replace(/^0+/, '');
+        if (n.startsWith('55') && (n.length === 12 || n.length === 13)) return n;
+        if (n.length === 10 || n.length === 11) return '55' + n;
+        if (n.length === 8 || n.length === 9) return '5583' + n;
+        return n.startsWith('55') ? n : '55' + n;
+    };
+    const telefoneFormatado = normalizarFn(crismando?.telefone, '83');
+    if (!telefoneFormatado || telefoneFormatado.length < 12) {
         alert("Telefone do crismando não cadastrado ou inválido.");
         return;
     }
 
-    const telefoneFormatado = telefone.startsWith('55') ? telefone : '55' + telefone;
     const url = `https://wa.me/${telefoneFormatado}?text=${encodeURIComponent(texto)}`;
     window.open(url, '_blank');
 }

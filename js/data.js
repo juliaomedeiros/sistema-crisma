@@ -208,7 +208,9 @@ async function carregarDados() {
 
 async function adicionarCrismando() {
   const nome = document.getElementById("novoNome").value.trim();
-  const telefone = document.getElementById("novoTelefone").value.trim();
+  const telRaw = document.getElementById("novoTelefone").value.trim();
+  const formatarFn = typeof formatarTelefoneExibicao === 'function' ? formatarTelefoneExibicao : (t) => t;
+  const telefone = telRaw ? formatarFn(telRaw, "83") : "";
   const valor = parseFloat(document.getElementById("novoValor").value) || window.configuracoesSistema.valor_mensal_padrao || 10.00;
 
   if (!nome) { alert("Por favor, informe o nome do crismando."); return; }
@@ -753,7 +755,9 @@ function fecharModalEditarCrismando() {
 async function salvarEdicaoCrismando() {
   const id = document.getElementById("editCrismandoId").value;
   const nome = document.getElementById("editNome").value.trim();
-  const telefone = document.getElementById("editTelefone").value.trim();
+  const telRaw = document.getElementById("editTelefone").value.trim();
+  const formatarFn = typeof formatarTelefoneExibicao === 'function' ? formatarTelefoneExibicao : (t) => t;
+  const telefone = telRaw ? formatarFn(telRaw, "83") : "";
   const valor_mensal = parseFloat(document.getElementById("editValorMensal").value) || window.configuracoesSistema?.valor_mensal_padrao || 10.00;
 
   if (!id) return;
