@@ -419,6 +419,28 @@ async function registrarPagamento() {
       return;
     }
 
+    // Verificação de concorrência: checar se algum mês já foi pago por outro usuário
+    const { data: pagsExistentes, error: errPagsEx } = await supabase
+      .from("pagamentos")
+      .select("mes, ano")
+      .eq("crismando_id", crismandoId);
+
+    if (!errPagsEx && pagsExistentes && pagsExistentes.length > 0) {
+      const jaPagos = checkboxesMarcados.filter(chk => {
+        const m = chk.getAttribute("data-mes");
+        const a = parseInt(chk.getAttribute("data-ano"));
+        return pagsExistentes.some(p => p.mes === m && p.ano === a);
+      });
+
+      if (jaPagos.length > 0) {
+        const listaNomes = jaPagos.map(chk => `${chk.getAttribute("data-mes")}/${chk.getAttribute("data-ano")}`).join(", ");
+        alert(`⚠️ ATENÇÃO: O(s) mês(es) a seguir já consta(m) como pago(s) no sistema:\n\n${listaNomes}\n\nA tela será atualizada para refletir os pagamentos mais recentes.`);
+        await carregarDados();
+        atualizarGradeMeses();
+        return;
+      }
+    }
+
     const dataHoje = new Date().toISOString().split("T")[0];
     const listaMesesAnos = [];
     const dadosPagamentosParaInserir = [];
@@ -474,50 +496,64 @@ async function registrarPagamento() {
     window.dadosComprovanteAtual = resultadoComprovante.dadosComprovante;
     window.textoComprovanteAtual = resultadoComprovante.mensagemTexto;
 
-    // LÓGICA DE DISPARO: IMEDIATO OU ACUMULADO EM LOTE POSTERIOR
-    if (enviarAgora) {
-      if (crismandoExiste.telefone) {
-        const enviadoOk = await enviarTextoEvolutionGo(
-          crismandoExiste.telefone,
-          resultadoComprovante.mensagemTexto
-        );
+    const mesesFormatados = listaMesesAnos.map(m => `${m.mes}/${m.ano}`).join(", ");
+    const valorStr = parseFloat(valorTotalGeral).toFixed(2).replace(".", ",");
 
-        if (enviadoOk) {
-          alert(
-            `✅ PAGAMENTO E RECIBO REGISTRADOS COM SUCESSO!\n\n` +
-            `👤 Crismando: ${crismandoExiste.nome}\n` +
-            `💰 Total Quitado: R$ ${valorTotalGeral.toFixed(2).replace(".", ",")}\n` +
-            `📱 Recibo enviado com sucesso no WhatsApp de ${crismandoExiste.nome}!`
-          );
-        } else {
-          alert(
-            `✅ Pagamento de ${crismandoExiste.nome} (R$ ${valorTotalGeral.toFixed(2).replace(".", ",")}) registrado com sucesso no banco!\n\n` +
-            `⚠️ Contudo, a mensagem no WhatsApp não pôde ser entregue no momento. Verifique a conexão com o WhatsApp.`
-          );
-        }
-      } else {
-        alert(
-          `✅ Pagamento de ${crismandoExiste.nome} (R$ ${valorTotalGeral.toFixed(2).replace(".", ",")}) registrado com sucesso!\n\n` +
-          `⚠️ Crismando não possui número de telefone cadastrado para o envio do recibo.`
-        );
-      }
-    } else {
-      // Enfileira de forma centralizada no Supabase (Multi-usuário em tempo real)
-      await enfileirarMensagemWhatsApp({
-        crismando_id: crismandoExiste.id,
-        nome_destinatario: crismandoExiste.nome,
-        telefone: crismandoExiste.telefone || "",
-        tipo: "recibo",
-        mensagem: resultadoComprovante.mensagemTexto
-      });
+    // Verificar se já existe comprovante pendente, processando ou enviado para este crismando com estes mesmos meses (Anti-Duplicação)
+    let comprovanteJaEnfileirado = false;
+    const { data: recExistentes } = await supabase
+      .from("fila_mensagens_whatsapp")
+      .select("id, status, created_at, mensagem")
+      .eq("crismando_id", crismandoExiste.id)
+      .eq("tipo", "recibo")
+      .in("status", ["pendente", "processando", "enviado"]);
+
+    if (recExistentes && recExistentes.length > 0) {
+      comprovanteJaEnfileirado = recExistentes.some(r => r.mensagem && r.mensagem.includes(mesesFormatados));
+    }
+
+    if (!comprovanteJaEnfileirado) {
+      const usuarioAtual = (window.auth && window.auth.currentUser) ? window.auth.currentUser.nome : "Coordenador";
+      await supabase
+        .from("fila_mensagens_whatsapp")
+        .insert([{
+          crismando_id: crismandoExiste.id,
+          nome_destinatario: crismandoExiste.nome,
+          telefone: crismandoExiste.telefone ? crismandoExiste.telefone.replace(/\D/g, "") : "",
+          tipo: "recibo",
+          tipo_envio: "recibo",
+          mensagem: resultadoComprovante.mensagemTexto,
+          dados_template: {
+            template: "comprovante_pagamento_crisma",
+            params: [
+              crismandoExiste.nome,
+              mesesFormatados,
+              valorStr
+            ]
+          },
+          status: "pendente",
+          prioridade: 2,
+          tentativas: 0,
+          criado_por: usuarioAtual
+        }]);
 
       alert(
         `✅ PAGAMENTO REGISTRADO COM SUCESSO!\n\n` +
         `👤 Crismando: ${crismandoExiste.nome}\n` +
-        `💰 Total Quitado: R$ ${valorTotalGeral.toFixed(2).replace(".", ",")}\n` +
-        `🧾 O recibo foi adicionado à fila unificada para envio posterior.`
+        `💰 Total Quitado: R$ ${valorStr}\n` +
+        `🧾 O comprovante foi adicionado à fila do servidor e será enviado automaticamente pelo WhatsApp em segundo plano via Meta Cloud API Oficial!`
+      );
+    } else {
+      alert(
+        `✅ PAGAMENTO REGISTRADO COM SUCESSO!\n\n` +
+        `👤 Crismando: ${crismandoExiste.nome}\n` +
+        `💰 Total Quitado: R$ ${valorStr}\n` +
+        `ℹ️ O comprovante para este(s) mês(es) já foi enfileirado/enviado anteriormente, evitando disparo duplicado.`
       );
     }
+
+    if (typeof carregarMetricasFila === "function") carregarMetricasFila();
+    if (typeof carregarTabelaMensagensFila === "function") carregarTabelaMensagensFila();
 
     // Limpar formulário para próximo atendimento
     document.getElementById("campoBuscaCrismando").value = "";

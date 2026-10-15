@@ -228,12 +228,20 @@ serve(async (req) => {
             extrairValor(textoMsg) || "10,00",
           ];
         } else if (tipo === "aviso_falta") {
-          templateName = "aviso_ausencia_crisma";
-          templateParams = [
-            nomeDest,
-            extrairData(textoMsg) || dataHoje,
-            extrairFaltas(textoMsg) || "1",
-          ];
+          if (textoMsg.includes("total de faltas") || textoMsg.includes("resumo") || textoMsg.includes("acumulada(s)")) {
+            templateName = "resumo_faltas_crisma";
+            templateParams = [
+              nomeDest,
+              extrairFaltas(textoMsg) || "1",
+            ];
+          } else {
+            templateName = "aviso_ausencia_crisma";
+            templateParams = [
+              nomeDest,
+              extrairData(textoMsg) || dataHoje,
+              extrairFaltas(textoMsg) || "1",
+            ];
+          }
         } else {
           templateName = "comunicado_geral_crisma";
           templateParams = [nomeDest, limparTextoAviso(textoMsg)];

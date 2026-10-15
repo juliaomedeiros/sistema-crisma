@@ -189,6 +189,9 @@ async function carregarTabelaMensagensFila(tipoFiltro = filtroTipoFilaAtual) {
       } else if (tipo === "recibo") {
         tipoLabel = "🧾 Recibo";
         tipoCor = "#27ae60";
+      } else if (tipo === "aviso_falta" || tipo === "falta") {
+        tipoLabel = "📅 Aviso de Falta";
+        tipoCor = "#8e44ad";
       }
 
       let statusBadge = "";

@@ -89,9 +89,8 @@ c:\ProjectsCode\sistema-crisma\
   - Campo com autocomplete dinâmico para seleção do crismando.
   - Grade de 12 botões/checkboxes correspondentes ao ciclo catequético (Setembro do ano de início até Agosto do ano seguinte).
   - Cálculo instantâneo do valor total baseado na quantidade de meses selecionados.
-  - Botão `💰 Registrar Pagamento(s)`: Salva no Supabase prevenindo duplicidades.
+  - Botão `💰 Registrar Pagamento(s)`: Salva no Supabase prevenindo duplicidades em pagamentos e enfileira o comprovante automaticamente na fila do servidor com deduplicação rigorosa (não reenvia recibo duplicado para o mesmo aluno e mesmos meses).
   - Botão `🧾 Ver Comprovante em Texto`: Exibe modal com texto pronto, versículo bíblico e código de autenticação único de 8 caracteres.
-  - Botão `🧾 Disparar Recibos Pendentes do Encontro`: Enfileira os comprovantes acumulados na fila autônoma do servidor.
 - **Pesquisa Individual & Matriz Anual:** Histórico completo de contribuições de cada aluno com cards coloridos (verde = pago, vermelho = pendente).
 - **Relatório Mensal e Exportação Excel:** Tabela filtrável por Mês/Ano e exportação para `.xlsx`.
 
@@ -106,10 +105,18 @@ c:\ProjectsCode\sistema-crisma\
   - Lista de chamada com filtros rápidos por chips (`Todos`, `🟢 Presentes`, `🔴 Faltas`, `🟡 Justificados`).
   - Botão de atalho `☑️ Marcar Todos Presentes`.
   - **Régua de Alertas de Faltas:**
-    - 🟡 3 Faltas: Aviso inicial.
+    - 🟡 3-4 Faltas: Aviso inicial.
     - 🟠 5 Faltas: Atenção moderada.
     - 🔴 6 Faltas: Alerta crítico.
     - ⛔ 7+ Faltas: Desligado da turma.
+- **Notificação de Ausências por Encontro:**
+  - Ao salvar chamada com faltas, abre modal com checkboxes individuais, `[☑️ Marcar Todos]` e `[⬜ Desmarcar Todos]`.
+  - Enfileira no servidor com o template oficial `aviso_ausencia_crisma` (Categoria: UTILITY) sem travar o navegador do catequista.
+- **Panorama Geral de Faltosos:**
+  - Botão `📊 Panorama de Faltosos (N)` no topo da lista de frequência.
+  - Abre modal consolidado de todos os crismandos com `≥ 1 falta` no ciclo ordenados por criticidade.
+  - Campo de busca instantânea, checkboxes individuais, `[☑️ Marcar Todos]` e `[⬜ Desmarcar Todos]`.
+  - Botão de disparo de resumo geral de faltas via WhatsApp Meta Cloud API com o template `resumo_faltas_crisma` (Categoria: UTILITY).
 
 ### Aba 4: 📊 Gestão de Caixa (`tabFinanceiro`)
 - **Livro Caixa Paroquial:**
@@ -120,38 +127,39 @@ c:\ProjectsCode\sistema-crisma\
 ### Aba 5: ⚙️ Servidor WhatsApp & Configurações (`tabEvolution`)
 - **Configurações da Turma:** Mês de início do ciclo (padrão: Setembro), ano de início, valor mensal padrão e nome da edição.
 - **Configuração do Coordenador:** Campo para cadastrar o WhatsApp do coordenador que receberá relatórios e alertas automáticos.
-- **Central de Monitoramento da Fila de Mensagens (NOVO):**
-  - **5 Cards de Métricas:** *Na Fila*, *Enviadas Hoje*, *Falhas Definitivas*, *Reagendadas*, *Teto Seguro Diário (ex: 47 / 60 com barra de progresso visual)*.
-  - **Banner de Alerta `NotifyAccountReachoutTimelock`:** Contagem regressiva em tempo real exibindo a expiração de restrições do WhatsApp com aviso de fila congelada.
-  - **Status da Instância Evolution Go:** Checagem via API HTTP (🟢 Conectado / 🔴 Desconectado / 🟡 Aguardando QR).
-  - **Tabela Histórica com Filtros:** Filtro por chips (`Todos`, `📢 Avisos em Lote`, `💰 Cobranças`, `🧾 Recibos`), descrição do erro e botão **`[🔄 Reenviar]`** individual com prioridade alta.
+- **Central de Monitoramento da Fila de Mensagens:**
+  - **5 Cards de Métricas:** *Na Fila*, *Enviadas Hoje*, *Falhas Definitivas*, *Reagendadas*, *Teto Seguro Diário (ex: 47 / 250 com barra de progresso visual)*.
+  - **Status da Conexão:** 🟢 Meta Cloud API Oficial Conectada.
+  - **Tabela Histórica com Filtros:** Filtros por chips (`Todos`, `📢 Avisos em Lote`, `💰 Cobranças`, `🧾 Recibos`, `📅 Faltas`).
+  - **Ações na Fila:** Exibição da data/hora exata da geração da mensagem, botão individual **`[🗑️ Excluir]`**, botão individual **`[🔄 Reenviar]`** com alta prioridade e botão mestre **`[🔄 Reenviar Todas as Falhas]`** respeitando o limite diário de 250 mensagens.
 
 ### Aba 6: 📢 Avisos em Lote (`tabAvisosLote`)
 - **Compositor de Mensagens Livres:** Textarea com suporte a variáveis dinâmicas (`{nome}`, `{telefone}`, `{valor}`).
 - **Preview Visual do WhatsApp:** Card estilizado simulando a visão exata do crismando.
 - **Seleção Flexível:** Botões `[Marcar Todos]`, `[Desmarcar Todos]` e checkboxes individuais de cada aluno.
-- **Disparo Seguro em Background:** Ao clicar em `🚀 Iniciar Disparo em Lote`, enfileira apenas os contatos marcados na fila do banco de dados e libera o operador imediatamente.
+- **Disparo Seguro em Background:** Ao clicar em `🚀 Iniciar Disparo em Lote`, enfileira os contatos marcados na fila do banco de dados com template `comunicado_geral_crisma` e libera o operador imediatamente.
 
 ---
 
-## 🛡️ 5. Arquitetura da Fila Backend e Protocolo Anti-Ban
+## 🛡️ 5. Arquitetura da Fila Backend e Meta Cloud API Oficial
 
-### O Problema Resolvido:
-O envio de mensagens para contatos novos ou sem histórico (*cold reachout*) por APIs não-oficiais (whatsmeow / Evolution Go) aciona os filtros heurísticos da Meta caso haja rajadas sequenciais, gerando o evento `NotifyAccountReachoutTimelock` (trava de 24 horas) e revogação da sessão (`device_removed / 401`).
+### As Proteções Ativas:
 
-### As 5 Camadas de Proteção Ativas:
-
-1. **Teto Rígido de 60 Mensagens/Dia:**
+1. **Teto Rígido de 250 Mensagens/Dia:**
    - Controlado via banco na tabela `controle_envios_diarios`.
-   - Para a base de ~180 crismandos, o lote é distribuído em ~3 dias úteis.
+   - Limite oficial seguro da Meta para turmas e pastorais sem risco de bloqueio.
 2. **Horário Comercial Estrito:**
    - A Edge Function só dispara mensagens entre **08:00 e 20:00** (horário de Brasília). Fora desse horário, descansa automaticamente.
-3. **Jitter Estocástico Anti-Padrão:**
-   - 20% das invocações do `pg_cron` são propositalmente puladas para que os envios não ocorram em intervalos matemáticos idênticos.
-4. **Composing Humano Proporcional:**
-   - O worker envia o estado `presence: "composing"` (digitando...) proporcional ao tamanho da mensagem (~35ms por caractere, entre 3.5s e 9.5s).
-5. **Circuit Breaker para Timelock e Falhas:**
-   - Se o WhatsApp retornar erro 463 ou evento de Reachout Timelock, o sistema grava `timelock_ativo = true` e congela a fila por 24 horas, notificando o coordenador e exibindo alerta no dashboard para evitar banimento definitivo.
+3. **Disparo em Lotes Controlados:**
+   - O worker processa lotes de até 5 mensagens por ciclo de 2 minutos acionado pelo `pg_cron`.
+4. **Templates Homologados por Finalidade:**
+   - `aviso_ausencia_crisma` (UTILITY): Notificação de ausência de encontro específico.
+   - `resumo_faltas_crisma` (UTILITY): Resumo do panorama de faltas acumuladas.
+   - `comprovante_pagamento_crisma` (UTILITY): Recibo digital de quitação de mensalidades.
+   - `lembrete_mensalidade_crisma` (UTILITY): Lembrete amigável de contribuição.
+   - `comunicado_geral_crisma` (MARKETING): Avisos gerais e comunicados avulsos.
+5. **Reagendamento Inteligente:**
+   - Caso um template recém-submetido esteja em aprovação (erros 132000/132001), a mensagem é reagendada para 15 minutos sem falhar definitivamente.
 
 ### Ciclo de Execução:
 ```
@@ -161,22 +169,20 @@ O envio de mensagens para contatos novos ou sem histórico (*cold reachout*) por
 [Edge Function: processar-fila-whatsapp]
        │
        ├─ É horário comercial (08h às 20h Brasília)? ──(Não)──► Pausa até 08:00
-       ├─ Timelock ativo no banco? ──────────────────────(Sim)──► Fila congelada
-       ├─ Limite diário (60) atingido hoje? ─────────────(Sim)──► Pausa até amanhã
-       ├─ Jitter estocástico (pula 20% das vezes)? ──────(Sim)──► Pausa humana
+       ├─ Limite diário (250) atingido hoje? ────────────(Sim)──► Pausa até amanhã
        │
        ▼
-[Pega 1 mensagem pendente no banco]
+[Seleciona até 5 mensagens pendentes / reagendadas]
        │
        ▼
-[Envia via Evolution Go com Composing proporcional]
+[Dispara via Meta Cloud API Oficial v21.0 com Template]
        │
        ├─ Sucesso ──────► Marca 'enviado' + Incrementa contador diário
        │                  Verifica se é o último do lote ➔ Notifica Coordenador
        │
-       ├─ Erro 463 ─────► Ativa Timelock 24h + Alerta Coordenador
+       ├─ Template Pendente ➔ Reagenda para 15 minutos
        │
-       └─ Erro 500/Rede ─► Reagenda para 35 minutos (até 3 tentativas)
+       └─ Erro de Rede/Meta ─► Reagenda até 3 tentativas antes de falha definitiva
 ```
 
 ---
@@ -189,13 +195,13 @@ O envio de mensagens para contatos novos ou sem histórico (*cold reachout*) por
 | `pagamentos` | Registro das contribuições (crismando_id, mes, ano, valor, data_pagamento) | Pública (`anon` e `authenticated`) |
 | `codigos_autenticacao` | Códigos únicos de 8 caracteres para validação de comprovantes | Pública (`anon` e `authenticated`) |
 | `usuarios_autenticados` | Contas de login dos coordenadores (email, senha_hash, salt, tentativas) | Restrita via `auth.js` |
-| `encontros_crisma` | Datas e temas dos encontros de catequese | Pública |
-| `frequencia_crisma` | Presenças/faltas de cada crismando por encontro | Pública |
+| `encontros` | Datas e temas dos encontros de catequese | Pública |
+| `presencas` | Presenças/faltas de cada crismando por encontro | Pública |
 | `despesas_crisma` | Gastos e saídas do livro caixa | Pública |
 | `entradas_extras_crisma` | Taxas e doações do livro caixa | Pública |
 | `configuracoes_sistema` | JSON com ciclo catequético e `telefone_coordenador` | Pública (`Permitir tudo`) |
-| `fila_mensagens_whatsapp` | Fila de envio (lote_id, tipo_envio, telefone, mensagem, status, prioridade) | Pública (`Permitir tudo`) |
-| `controle_envios_diarios` | Contador diário de envios (limite 60) e flags de timelock | Pública (`Permitir tudo`) |
+| `fila_mensagens_whatsapp` | Fila de envio (lote_id, tipo_envio, telefone, mensagem, dados_template, status, prioridade) | Pública (`Permitir tudo`) |
+| `controle_envios_diarios` | Contador diário de envios (limite 250) | Pública (`Permitir tudo`) |
 
 ---
 
@@ -206,5 +212,6 @@ O envio de mensagens para contatos novos ou sem histórico (*cold reachout*) por
    - Nunca altere a posição de botões existentes.
    - Sempre mantenha os botões `[Marcar Todos]`, `[Desmarcar Todos]` e checkboxes individuais onde houver seleção de contatos.
 3. **Respeite o Banco e Paginação:** Ao buscar dados de `pagamentos`, sempre use busca paginada com `.range()` para superar o limite de 1000 registros do Supabase.
-4. **Proteção Anti-Ban é Sagrada:** Nunca reduza os delays para menos de 30s nem remova o teto de 60 msgs/dia em disparos automáticos.
-5. **Idioma Oficial:** Todo código de interface, comentários, mensagens de erro, alertas e relatórios devem ser em **Português do Brasil (PT-BR)**.
+4. **Meta Cloud API Oficial Exclusiva:** Nunca reintroduza Evolution Go ou gateways não-oficiais. Todos os disparos utilizam a API oficial da Meta v21.0 com limite de 250 msgs/dia.
+5. **Uso Rigoroso de Templates UTILITY para Faltas:** Jamais use `comunicado_geral_crisma` para faltas; use estritamente `aviso_ausencia_crisma` e `resumo_faltas_crisma`.
+6. **Idioma Oficial:** Todo código de interface, comentários, mensagens de erro, alertas e relatórios devem ser em **Português do Brasil (PT-BR)**.
