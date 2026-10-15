@@ -151,8 +151,12 @@ function alternarAba(tabId) {
     if (typeof carregarDestinatariosAviso === "function") {
       carregarDestinatariosAviso();
     }
-    if (typeof atualizarPreviewAviso === "function") {
-      atualizarPreviewAviso();
+  } else if (tabId === "tabFrequencia") {
+    if (typeof calcularMapaFaltas === "function") {
+      calcularMapaFaltas();
+    }
+    if (typeof atualizarContadoresFiltrosChamada === "function") {
+      atualizarContadoresFiltrosChamada();
     }
   } else if (tabId === "tabEvolution") {
     if (typeof inicializarDashboardFila === "function") {

@@ -127,9 +127,6 @@
                     <div class="button-group" style="display: flex; flex-wrap: wrap; gap: 10px;">
                         <button class="btn btn-success" style="flex: 1; min-width: 200px;" onclick="registrarPagamento()">💰 Registrar Pagamento(s)</button>
                         <button class="btn btn-info" style="flex: 1; min-width: 200px;" onclick="gerarComprovante()">🧾 Ver Comprovante em Texto</button>
-                        <button class="btn btn-warning" id="btnDispararRecibosPendentes" style="flex: 1; min-width: 220px; display: none; background: #f39c12; color: white;" onclick="dispararRecibosPendentesDoDia()">
-                            🧾 Disparar Recibos Pendentes do Encontro (<span id="lblQtdRecibosPendentes">0</span>)
-                        </button>
                     </div>
                 </div>
 
@@ -294,6 +291,7 @@
                         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 15px;">
                             <h4 style="color: #2c3e50; margin: 0;" id="tituloTabelaChamada">👥 Lista Geral de Faltas Acumuladas</h4>
                             <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                                <button class="btn btn-warning" id="btnAbrirPanoramaFaltosos" style="background: #e67e22; color: white;" onclick="abrirModalPanoramaFaltosos()">📊 Panorama de Faltosos (<span id="cntPanoramaFaltosos">0</span>)</button>
                                 <button class="btn btn-info" id="btnMarcarTodosPresentes" onclick="marcarTodosPresentesChamada()">☑️ Marcar Todos Presentes</button>
                                 <button class="btn btn-success" id="btnSalvarChamada" onclick="salvarChamadaEncontro()">💾 Salvar Chamada do Encontro</button>
                             </div>
@@ -592,6 +590,7 @@
                             <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
                                 <span style="font-size: 12px; font-weight: bold; color: #64748b; margin-right: 4px;">Tipo:</span>
                                 <button type="button" class="chip-filtro-fila active" id="chipFila_TODOS" onclick="carregarTabelaMensagensFila('TODOS')">Todos</button>
+                                <button type="button" class="chip-filtro-fila" id="chipFila_aviso_falta" onclick="carregarTabelaMensagensFila('aviso_falta')">📅 Faltas</button>
                                 <button type="button" class="chip-filtro-fila" id="chipFila_aviso_lote" onclick="carregarTabelaMensagensFila('aviso_lote')">📢 Avisos em Lote</button>
                                 <button type="button" class="chip-filtro-fila" id="chipFila_cobranca" onclick="carregarTabelaMensagensFila('cobranca')">💰 Cobranças</button>
                                 <button type="button" class="chip-filtro-fila" id="chipFila_recibo" onclick="carregarTabelaMensagensFila('recibo')">🧾 Recibos</button>

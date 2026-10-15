@@ -54,6 +54,10 @@ function calcularMapaFaltas() {
       mapaFaltasAcumuladas[cId] = (mapaFaltasAcumuladas[cId] || 0) + 1;
     }
   });
+
+  const totalFaltososGeral = Object.values(mapaFaltasAcumuladas).filter(q => q >= 1).length;
+  const elCntPanorama = document.getElementById("cntPanoramaFaltosos");
+  if (elCntPanorama) elCntPanorama.textContent = totalFaltososGeral;
 }
 
 function obterBadgeFaltas(qtdFaltas) {
@@ -224,6 +228,10 @@ function atualizarContadoresFiltrosChamada() {
   if (elP) elP.textContent = cntP;
   if (elF) elF.textContent = cntF;
   if (elJ) elJ.textContent = cntJ;
+
+  const totalFaltososGeral = Object.values(mapaFaltasAcumuladas || {}).filter(q => q >= 1).length;
+  const elCntPanorama = document.getElementById("cntPanoramaFaltosos");
+  if (elCntPanorama) elCntPanorama.textContent = totalFaltososGeral;
 }
 
 function atualizarTabelaChamada() {
@@ -442,146 +450,403 @@ async function salvarChamadaEncontro() {
   }
 }
 
+// Modal de Notificação de Ausências do Encontro (com checkboxes e envio assíncrono para fila do servidor)
 function exibirModalNotificacaoFaltas(faltosos, dataEncontroStr) {
-  let htmlTextos = "";
+  let htmlCards = "";
 
   faltosos.forEach((item, index) => {
     const c = item.crismando;
     const totalF = item.totalFaltas;
+    const temTel = !!(c.telefone && c.telefone.replace(/\D/g, "").length >= 8);
     const msg = `Olá, ${c.nome}. Registramos a sua ausência no encontro da Crisma do dia *${dataEncontroStr}*. Lembramos que o limite tolerado pela coordenação é de 7 faltas e no momento você possui *${totalF} falta(s)* acumulada(s).\n\n"Eu sou o caminho, a verdade e a vida." - João 14:6. Contamos com sua presença no próximo encontro! 🙏`;
 
-    htmlTextos += `
-      <div style="border-bottom: 1px solid #eee; padding-bottom: 12px; margin-bottom: 12px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:5px;">
-          <strong>👤 ${c.nome} (Total: ${totalF} faltas)</strong>
-          <button id="btnEnvFalta_${index}" class="btn btn-warning" style="padding: 4px 10px; font-size: 12px;" onclick="enviarAvisoFaltaIndividual(this, '${c.nome}', '${c.telefone || ''}', '${dataEncontroStr}', ${totalF})">
-            📱 Enviar Aviso via WhatsApp
-          </button>
+    htmlCards += `
+      <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 10px; background: ${temTel ? '#ffffff' : '#fff5f5'};">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+          <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; margin: 0; font-weight: bold; color: #1e293b;">
+            <input type="checkbox" class="chk-faltoso-modal" 
+              data-id="${c.id}" 
+              data-nome="${c.nome}" 
+              data-tel="${c.telefone || ''}" 
+              data-faltas="${totalF}" 
+              ${temTel ? 'checked' : 'disabled'} 
+              onchange="atualizarContagemFaltososModal()">
+            <span>👤 ${c.nome}</span>
+          </label>
+          <div style="display:flex; align-items:center; gap:8px;">
+            ${obterBadgeFaltas(totalF)}
+            <span style="font-size: 12px; color: ${temTel ? '#64748b' : '#e74c3c'};">${c.telefone || '⚠️ Sem telefone'}</span>
+          </div>
         </div>
-        <div style="background: #f8f9fa; padding: 8px; border-radius: 5px; font-size: 12px; margin-top: 5px; color: #555;">${msg}</div>
+        <div style="background: #f8fafc; padding: 8px; border-radius: 6px; font-size: 11px; margin-top: 8px; color: #475569; border-left: 3px solid #3b82f6;">
+          ${msg}
+        </div>
       </div>
     `;
   });
+
+  const modalExistente = document.getElementById("modalNotificacaoFaltas");
+  if (modalExistente) modalExistente.remove();
 
   const modal = document.createElement("div");
   modal.className = "modal";
   modal.id = "modalNotificacaoFaltas";
   modal.style.display = "block";
   modal.innerHTML = `
-    <div class="modal-content" style="max-width: 650px;">
-      <span class="close" onclick="this.parentElement.parentElement.remove()">&times;</span>
-      <h3 style="color: #c0392b; margin-bottom: 10px; text-align: center;">📱 Notificações de Ausência (${faltosos.length})</h3>
-      <p style="font-size: 13px; color: #555; margin-bottom: 15px;">Os crismandos abaixo receberam registro de falta neste encontro. Dispare os avisos via WhatsApp:</p>
+    <div class="modal-content" style="max-width: 680px; max-height: 90vh; display: flex; flex-direction: column;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 12px;">
+        <h3 style="color: #c0392b; margin: 0;">📱 Notificar Ausências no WhatsApp (${faltosos.length})</h3>
+        <span class="close" style="cursor: pointer; font-size: 24px; font-weight: bold; color: #64748b;" onclick="fecharModalNotificacaoFaltas()">&times;</span>
+      </div>
+
+      <p style="font-size: 13px; color: #475569; margin: 0 0 12px 0;">
+        Encontro de <strong>${dataEncontroStr}</strong>. Selecione os crismandos que receberão o aviso de falta. O envio é realizado pelo <strong>servidor em segundo plano</strong> via Meta Cloud API Oficial.
+      </p>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; background: #f1f5f9; padding: 8px 12px; border-radius: 6px;">
+        <div style="display: flex; gap: 8px;">
+          <button type="button" class="btn btn-sm btn-info" style="padding: 4px 10px; font-size: 12px;" onclick="marcarTodosFaltososModal(true)">☑️ Marcar Todos</button>
+          <button type="button" class="btn btn-sm btn-secondary" style="padding: 4px 10px; font-size: 12px; background: #64748b; color: white;" onclick="marcarTodosFaltososModal(false)">⬜ Desmarcar Todos</button>
+        </div>
+        <span style="font-size: 13px; font-weight: bold; color: #1e293b;">
+          Selecionados: <span id="lblQtdFaltososSelecionados" style="color: #2563eb;">0</span> de ${faltosos.length}
+        </span>
+      </div>
       
-      <div style="max-height: 350px; overflow-y: auto; margin-bottom: 15px; padding-right: 5px;">${htmlTextos}</div>
+      <div id="listaCardsFaltososModal" style="flex: 1; overflow-y: auto; padding-right: 5px; max-height: 400px;">
+        ${htmlCards}
+      </div>
       
-      <div style="display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
-        <button class="btn btn-success" style="flex: 1;" onclick="dispararAvisosFaltaEmLote('${dataEncontroStr}')">
-          🚀 Disparar Todos Avisos de Falta via WhatsApp (Background)
+      <div style="display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 15px; border-top: 1px solid #e2e8f0; padding-top: 12px;">
+        <button class="btn btn-success" id="btnConfirmarEnvioFaltas" style="flex: 1; min-width: 200px;" onclick="enfileirarAvisosFaltaChamada('${dataEncontroStr}')">
+          🚀 Enviar Selecionados para Fila do Servidor (<span id="lblBtnQtdFaltas">0</span>)
         </button>
-        <button class="btn btn-secondary" style="background:#6c757d; color:white;" onclick="this.parentElement.parentElement.parentElement.remove()">
+        <button class="btn btn-secondary" style="background:#64748b; color:white;" onclick="fecharModalNotificacaoFaltas()">
+          Fechar / Não Notificar
+        </button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  atualizarContagemFaltososModal();
+}
+
+function fecharModalNotificacaoFaltas() {
+  const modal = document.getElementById("modalNotificacaoFaltas");
+  if (modal) modal.remove();
+}
+
+function marcarTodosFaltososModal(marcar) {
+  const checkboxes = document.querySelectorAll(".chk-faltoso-modal:not(:disabled)");
+  checkboxes.forEach(chk => chk.checked = marcar);
+  atualizarContagemFaltososModal();
+}
+
+function atualizarContagemFaltososModal() {
+  const selecionados = document.querySelectorAll(".chk-faltoso-modal:checked");
+  const qtd = selecionados.length;
+  const lbl = document.getElementById("lblQtdFaltososSelecionados");
+  const lblBtn = document.getElementById("lblBtnQtdFaltas");
+  const btn = document.getElementById("btnConfirmarEnvioFaltas");
+
+  if (lbl) lbl.textContent = qtd;
+  if (lblBtn) lblBtn.textContent = qtd;
+  if (btn) btn.disabled = (qtd === 0);
+}
+
+// Enfileira os avisos de ausência na fila_mensagens_whatsapp do Supabase
+async function enfileirarAvisosFaltaChamada(dataEncontroStr) {
+  const selecionados = Array.from(document.querySelectorAll(".chk-faltoso-modal:checked"));
+  if (selecionados.length === 0) {
+    alert("Nenhum crismando selecionado para envio.");
+    return;
+  }
+
+  const supabase = (typeof getSupabaseClient === 'function' ? getSupabaseClient() : null) || window.supabaseClient;
+  if (!supabase) {
+    alert("❌ Erro de conexão com o Supabase.");
+    return;
+  }
+
+  const btn = document.getElementById("btnConfirmarEnvioFaltas");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "⏳ Enfileirando mensagens...";
+  }
+
+  try {
+    const loteId = crypto.randomUUID();
+    const usuarioAtual = (window.auth && window.auth.currentUser) ? window.auth.currentUser.nome : "Coordenador";
+
+    const registros = selecionados.map(chk => {
+      const id = parseInt(chk.getAttribute("data-id"));
+      const nome = chk.getAttribute("data-nome");
+      const tel = (chk.getAttribute("data-tel") || "").replace(/\D/g, "");
+      const totalF = chk.getAttribute("data-faltas") || "1";
+      const msgTexto = `Olá, ${nome}. Registramos a sua ausência no encontro da Crisma do dia *${dataEncontroStr}*. Lembramos que o limite tolerado pela coordenação é de 7 faltas e no momento você possui *${totalF} falta(s)* acumulada(s).\n\n"Eu sou o caminho, a verdade e a vida." - João 14:6. Contamos com sua presença no próximo encontro! 🙏`;
+
+      return {
+        lote_id: loteId,
+        crismando_id: id,
+        nome_destinatario: nome,
+        telefone: tel,
+        tipo: "aviso_falta",
+        tipo_envio: "aviso_falta",
+        mensagem: msgTexto,
+        dados_template: {
+          template: "aviso_ausencia_crisma",
+          params: [nome, dataEncontroStr, String(totalF)]
+        },
+        status: "pendente",
+        prioridade: 2,
+        tentativas: 0,
+        criado_por: usuarioAtual
+      };
+    });
+
+    const { error } = await supabase.from("fila_mensagens_whatsapp").insert(registros);
+    if (error) throw error;
+
+    fecharModalNotificacaoFaltas();
+
+    alert(
+      `✅ ${registros.length} aviso(s) de falta adicionado(s) com sucesso à fila do servidor!\n\n` +
+      `🛡️ O servidor enviará automaticamente em segundo plano via Meta Cloud API Oficial (teto seguro de 250/dia).\n` +
+      `💻 Você não precisa ficar esperando. O status pode ser acompanhado na aba '⚙️ Servidor WhatsApp' filtrando por 'Faltas'.`
+    );
+
+    if (typeof carregarMetricasFila === "function") carregarMetricasFila();
+    if (typeof carregarTabelaMensagensFila === "function") carregarTabelaMensagensFila();
+
+  } catch (err) {
+    console.error("Erro ao enfileirar avisos de falta:", err);
+    alert(`❌ Erro ao adicionar avisos de falta na fila: ${err.message || err}`);
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = `🚀 Enviar Selecionados para Fila do Servidor (${selecionados.length})`;
+    }
+  }
+}
+
+// =========================================================================
+// PANORAMA GERAL DE FALTOSOS (TODOS OS ENCONTROS)
+// =========================================================================
+
+function abrirModalPanoramaFaltosos() {
+  if (!crismandos || crismandos.length === 0) {
+    alert("Nenhum crismando cadastrado no sistema.");
+    return;
+  }
+
+  // Filtrar apenas quem tem pelo menos 1 falta acumulada
+  const faltososGerais = crismandos
+    .filter(c => (mapaFaltasAcumuladas[String(c.id)] || 0) >= 1)
+    .map(c => ({
+      crismando: c,
+      totalFaltas: mapaFaltasAcumuladas[String(c.id)] || 0
+    }))
+    .sort((a, b) => b.totalFaltas - a.totalFaltas); // Ordenar decrescente por gravidade
+
+  if (faltososGerais.length === 0) {
+    alert("🎉 Parabéns! Nenhum crismando possui faltas registradas até o momento.\nA turma está 100% presente em todos os encontros!");
+    return;
+  }
+
+  let htmlLinhas = "";
+  faltososGerais.forEach(item => {
+    const c = item.crismando;
+    const totalF = item.totalFaltas;
+    const temTel = !!(c.telefone && c.telefone.replace(/\D/g, "").length >= 8);
+
+    htmlLinhas += `
+      <tr class="linha-panorama-faltoso" data-nome="${c.nome.toLowerCase()}">
+        <td style="text-align: center;">
+          <input type="checkbox" class="chk-panorama-faltoso"
+            data-id="${c.id}"
+            data-nome="${c.nome}"
+            data-tel="${c.telefone || ''}"
+            data-faltas="${totalF}"
+            ${temTel ? 'checked' : 'disabled'}
+            onchange="atualizarContagemPanoramaFaltosos()">
+        </td>
+        <td><strong>${c.nome}</strong></td>
+        <td><span style="font-size: 12px; color: ${temTel ? '#334155' : '#ef4444'};">${c.telefone || 'Sem telefone'}</span></td>
+        <td style="text-align: center;">${obterBadgeFaltas(totalF)}</td>
+      </tr>
+    `;
+  });
+
+  const modalExistente = document.getElementById("modalPanoramaFaltosos");
+  if (modalExistente) modalExistente.remove();
+
+  const modal = document.createElement("div");
+  modal.className = "modal";
+  modal.id = "modalPanoramaFaltosos";
+  modal.style.display = "block";
+  modal.innerHTML = `
+    <div class="modal-content" style="max-width: 750px; max-height: 90vh; display: flex; flex-direction: column;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 12px;">
+        <h3 style="color: #e67e22; margin: 0;">📊 Panorama Geral de Faltosos da Crisma (${faltososGerais.length})</h3>
+        <span class="close" style="cursor: pointer; font-size: 24px; font-weight: bold; color: #64748b;" onclick="fecharModalPanoramaFaltosos()">&times;</span>
+      </div>
+
+      <p style="font-size: 13px; color: #475569; margin: 0 0 12px 0;">
+        Lista consolidada de crismandos com faltas acumuladas em todo o ciclo. Selecione os alunos para disparar o resumo de faltas via WhatsApp Meta Cloud API Oficial (template <code>resumo_faltas_crisma</code>).
+      </p>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; background: #fff7ed; border: 1px solid #ffedd5; padding: 10px 12px; border-radius: 6px;">
+        <input type="text" id="buscaInputPanorama" placeholder="🔍 Filtrar por nome..." oninput="filtrarListaPanoramaFaltosos()" style="padding: 6px 12px; font-size: 13px; border: 1px solid #cbd5e1; border-radius: 6px; width: 220px;">
+        
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <button type="button" class="btn btn-sm btn-info" style="padding: 4px 10px; font-size: 12px;" onclick="marcarTodosPanorama(true)">☑️ Marcar Todos</button>
+          <button type="button" class="btn btn-sm btn-secondary" style="padding: 4px 10px; font-size: 12px; background: #64748b; color: white;" onclick="marcarTodosPanorama(false)">⬜ Desmarcar Todos</button>
+          <span style="font-size: 13px; font-weight: bold; color: #1e293b; margin-left: 5px;">
+            Selecionados: <span id="lblQtdSelecionadosPanorama" style="color: #ea580c;">0</span> de ${faltososGerais.length}
+          </span>
+        </div>
+      </div>
+
+      <div class="table-container" style="flex: 1; overflow-y: auto; max-height: 400px; border: 1px solid #e2e8f0; border-radius: 6px;">
+        <table>
+          <thead>
+            <tr style="background: #f8fafc; position: sticky; top: 0; z-index: 1;">
+              <th style="width: 40px; text-align: center;">Sel.</th>
+              <th>Crismando</th>
+              <th>Telefone</th>
+              <th style="text-align: center;">Faltas Acumuladas</th>
+            </tr>
+          </thead>
+          <tbody id="corpoTabelaPanoramaFaltosos">
+            ${htmlLinhas}
+          </tbody>
+        </table>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 15px; border-top: 1px solid #e2e8f0; padding-top: 12px;">
+        <button class="btn btn-warning" id="btnDispararResumoFaltas" style="flex: 1; min-width: 220px; background: #e67e22; color: white;" onclick="enfileirarResumoFaltasGerais()">
+          🚀 Enviar Resumo de Faltas dos Selecionados (<span id="lblBtnQtdResumoFaltas">0</span>)
+        </button>
+        <button class="btn btn-secondary" style="background: #64748b; color: white;" onclick="fecharModalPanoramaFaltosos()">
           Fechar
         </button>
       </div>
     </div>
   `;
   document.body.appendChild(modal);
+  atualizarContagemPanoramaFaltosos();
 }
 
-// Disparo individual de aviso de falta via WhatsApp REST API
-async function enviarAvisoFaltaIndividual(btn, nome, telefone, dataEncontroStr, totalFaltas) {
-  let tel = telefone ? telefone.replace(/\D/g, "") : "";
-  if (!tel) {
-    alert(`O crismando ${nome} não possui telefone cadastrado.`);
-    return;
-  }
-
-  const msg = `Olá, ${nome}. Registramos a sua ausência no encontro da Crisma do dia *${dataEncontroStr}*. Lembramos que o limite tolerado pela coordenação é de 7 faltas e no momento você possui *${totalFaltas} falta(s)* acumulada(s).\n\n"Eu sou o caminho, a verdade e a vida." - João 14:6. Contamos com sua presença no próximo encontro! 🙏`;
-
-  btn.disabled = true;
-  btn.style.background = "#f39c12";
-  btn.innerHTML = "⏳ Enviando...";
-
-  const ok = await enviarTextoEvolutionGo(tel, msg);
-
-  if (ok) {
-    btn.innerHTML = "✅ Enviado!";
-    btn.style.background = "#27ae60";
-    btn.style.borderColor = "#27ae60";
-  } else {
-    btn.disabled = false;
-    btn.style.background = "#e74c3c";
-    btn.style.borderColor = "#e74c3c";
-    btn.innerHTML = "❌ Erro! Tentar Novamente";
-  }
-}
-
-// Disparo em lote dos avisos de falta em background via Evolution Go
-async function dispararAvisosFaltaEmLote(dataEncontroStr) {
-  const modal = document.getElementById("modalNotificacaoFaltas");
+function fecharModalPanoramaFaltosos() {
+  const modal = document.getElementById("modalPanoramaFaltosos");
   if (modal) modal.remove();
+}
 
-  // Encontrar crismandos faltosos do encontro atual
-  const encontroId = parseInt(document.getElementById("selectEncontroChamada")?.value || 0);
-  const presencasDoEncontro = presencas.filter(p => p.encontro_id === encontroId && p.status === "FALTA");
-
-  if (presencasDoEncontro.length === 0) {
-    alert("Nenhuma falta registrada para este encontro.");
-    return;
-  }
-
-  const listaFaltosos = [];
-  presencasDoEncontro.forEach(p => {
-    const c = crismandos.find(cr => cr.id === p.crismando_id);
-    if (c && c.telefone) {
-      const totalF = mapaFaltasAcumuladas[c.id] || 1;
-      const msg = `Olá, ${c.nome}. Registramos a sua ausência no encontro da Crisma do dia *${dataEncontroStr}*. Lembramos que o limite tolerado pela coordenação é de 7 faltas e no momento você possui *${totalF} falta(s)* acumulada(s).\n\n"Eu sou o caminho, a verdade e a vida." - João 14:6. Contamos com sua presença no próximo encontro! 🙏`;
-      listaFaltosos.push({ crismando: c, mensagemTexto: msg });
+function marcarTodosPanorama(marcar) {
+  const checkboxes = document.querySelectorAll(".chk-panorama-faltoso:not(:disabled)");
+  checkboxes.forEach(chk => {
+    const tr = chk.closest("tr");
+    if (!tr || tr.style.display !== "none") {
+      chk.checked = marcar;
     }
   });
+  atualizarContagemPanoramaFaltosos();
+}
 
-  if (listaFaltosos.length === 0) {
-    alert("Nenhum dos crismandos faltosos possui telefone cadastrado.");
+function filtrarListaPanoramaFaltosos() {
+  const termo = (document.getElementById("buscaInputPanorama")?.value || "").trim().toLowerCase();
+  const linhas = document.querySelectorAll(".linha-panorama-faltoso");
+  linhas.forEach(linha => {
+    const nome = linha.getAttribute("data-nome") || "";
+    linha.style.display = nome.includes(termo) ? "" : "none";
+  });
+  atualizarContagemPanoramaFaltosos();
+}
+
+function atualizarContagemPanoramaFaltosos() {
+  const selecionados = document.querySelectorAll(".chk-panorama-faltoso:checked");
+  const qtd = selecionados.length;
+  const lbl = document.getElementById("lblQtdSelecionadosPanorama");
+  const lblBtn = document.getElementById("lblBtnQtdResumoFaltas");
+  const btn = document.getElementById("btnDispararResumoFaltas");
+
+  if (lbl) lbl.textContent = qtd;
+  if (lblBtn) lblBtn.textContent = qtd;
+  if (btn) btn.disabled = (qtd === 0);
+}
+
+// Disparo do resumo de faltas para a fila do Supabase com o template resumo_faltas_crisma
+async function enfileirarResumoFaltasGerais() {
+  const selecionados = Array.from(document.querySelectorAll(".chk-panorama-faltoso:checked"));
+  if (selecionados.length === 0) {
+    alert("Nenhum crismando selecionado.");
     return;
   }
 
-  if (window.disparoEmAndamento) {
-    alert("⚠️ Já existe um disparo em lote em andamento. Aguarde a conclusão.");
+  const confirma = confirm(`Deseja agendar o resumo de faltas para ${selecionados.length} crismando(s)?\n\n🛡️ As mensagens serão enviadas em segundo plano pelo servidor via Meta Cloud API Oficial com o template 'resumo_faltas_crisma'.`);
+  if (!confirma) return;
+
+  const supabase = (typeof getSupabaseClient === 'function' ? getSupabaseClient() : null) || window.supabaseClient;
+  if (!supabase) {
+    alert("❌ Erro de conexão com o Supabase.");
     return;
   }
 
-  window.disparoEmAndamento = true;
-  renderizarBannerDisparoBackground();
-
-  let enviados = 0;
-  for (let i = 0; i < listaFaltosos.length; i++) {
-    if (!window.disparoEmAndamento) break;
-
-    if (window.auth && typeof window.auth.renovarSessao === "function") {
-      window.auth.renovarSessao();
-    }
-
-    const item = listaFaltosos[i];
-    atualizarBannerDisparo(i + 1, listaFaltosos.length, item.crismando.nome, 0);
-
-    const ok = await enviarTextoEvolutionGo(item.crismando.telefone, item.mensagemTexto);
-    if (ok) enviados++;
-
-    if (i < listaFaltosos.length - 1 && window.disparoEmAndamento) {
-      const delay = Math.floor(Math.random() * (45 - 15 + 1)) + 15;
-      for (let s = delay; s > 0; s--) {
-        if (!window.disparoEmAndamento) break;
-        if (window.auth && typeof window.auth.renovarSessao === "function") {
-          window.auth.renovarSessao();
-        }
-        atualizarBannerDisparo(i + 1, listaFaltosos.length, item.crismando.nome, s);
-        await new Promise(res => setTimeout(res, 1000));
-      }
-    }
+  const btn = document.getElementById("btnDispararResumoFaltas");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "⏳ Enfileirando mensagens...";
   }
 
-  window.disparoEmAndamento = false;
-  removerBannerDisparo();
+  try {
+    const loteId = crypto.randomUUID();
+    const usuarioAtual = (window.auth && window.auth.currentUser) ? window.auth.currentUser.nome : "Coordenador";
 
-  alert(`🏁 Disparo dos avisos de falta concluído!\n\n✅ Mensagens entregues: ${enviados}`);
+    const registros = selecionados.map(chk => {
+      const id = parseInt(chk.getAttribute("data-id"));
+      const nome = chk.getAttribute("data-nome");
+      const tel = (chk.getAttribute("data-tel") || "").replace(/\D/g, "");
+      const totalF = chk.getAttribute("data-faltas") || "1";
+      const msgTexto = `Olá, ${nome}. Segue o seu resumo de frequência na Crisma de Adultos: você possui atualmente *${totalF} falta(s)* acumulada(s).\n\nLembramos que o limite tolerado pela coordenação é de 7 faltas. Contamos com a sua dedicação e presença nos próximos encontros! 🙏`;
+
+      return {
+        lote_id: loteId,
+        crismando_id: id,
+        nome_destinatario: nome,
+        telefone: tel,
+        tipo: "aviso_falta",
+        tipo_envio: "aviso_falta",
+        mensagem: msgTexto,
+        dados_template: {
+          template: "resumo_faltas_crisma",
+          params: [nome, String(totalF)]
+        },
+        status: "pendente",
+        prioridade: 2,
+        tentativas: 0,
+        criado_por: usuarioAtual
+      };
+    });
+
+    const { error } = await supabase.from("fila_mensagens_whatsapp").insert(registros);
+    if (error) throw error;
+
+    fecharModalPanoramaFaltosos();
+
+    alert(
+      `✅ ${registros.length} resumo(s) de falta agendado(s) com sucesso na fila do servidor!\n\n` +
+      `🛡️ O servidor enviará gradualmente em segundo plano via Meta Cloud API Oficial (teto seguro de 250/dia).\n` +
+      `💻 Você pode acompanhar o progresso em tempo real na aba '⚙️ Servidor WhatsApp' filtrando por 'Faltas'.`
+    );
+
+    if (typeof carregarMetricasFila === "function") carregarMetricasFila();
+    if (typeof carregarTabelaMensagensFila === "function") carregarTabelaMensagensFila();
+
+  } catch (err) {
+    console.error("Erro ao enfileirar resumo de faltas:", err);
+    alert(`❌ Erro ao adicionar resumo de faltas na fila: ${err.message || err}`);
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = `🚀 Enviar Resumo de Faltas dos Selecionados (${selecionados.length})`;
+    }
+  }
 }

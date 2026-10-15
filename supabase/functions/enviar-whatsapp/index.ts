@@ -89,6 +89,10 @@ serve(async (req) => {
         const mes = (mensagem.match(/mês de:\s*\*([^*]+)\*/i)?.[1] || mensagem.match(/mês de\s*\*([^*]+)\*/i)?.[1] || "Mês Corrente").trim();
         const valor = (mensagem.match(/Valor:\s*R\$\s*([\d,.]+)/i)?.[1] || "10,00").trim();
         finalTplParams = [nomeDest, mes, valor];
+      } else if (mensagem.includes("total de faltas") || mensagem.includes("resumo de frequência") || mensagem.includes("acumulada(s)")) {
+        finalTplName = "resumo_faltas_crisma";
+        const faltas = (mensagem.match(/(\d+)\s*falta/i)?.[1] || "1").trim();
+        finalTplParams = [nomeDest, faltas];
       } else if (mensagem.includes("Registramos a sua ausência")) {
         finalTplName = "aviso_ausencia_crisma";
         const dataEnc = (mensagem.match(/(\d{2}\/\d{2}\/\d{4})/)?.[1] || "").trim();
