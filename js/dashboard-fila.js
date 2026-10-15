@@ -26,7 +26,32 @@ async function carregarTelefoneCoordenador() {
   }
 }
 
-// 2. Carrega as métricas dos cards e o status de restrição diária
+// Precificação Oficial Meta Cloud API (WhatsApp Business Platform Brasil +55)
+const VALORES_META_BRL = {
+  UTILITY: 0.0350,   // R$ 0,0350 por mensagem entregue (Recibos, Cobranças, Faltas)
+  MARKETING: 0.3217  // R$ 0,3217 por mensagem entregue (Avisos em Lote/Comunicados)
+};
+
+function categorizarMensagemMeta(item) {
+  const tpl = item.dados_template?.template;
+  if (tpl === "comunicado_geral_crisma") {
+    return "MARKETING";
+  }
+  if (tpl === "comprovante_pagamento_crisma" ||
+      tpl === "lembrete_mensalidade_crisma" ||
+      tpl === "aviso_ausencia_crisma" ||
+      tpl === "resumo_faltas_crisma") {
+    return "UTILITY";
+  }
+
+  const tipo = item.tipo || item.tipo_envio || "";
+  if (tipo === "aviso" || tipo === "aviso_lote") {
+    return "MARKETING";
+  }
+  return "UTILITY";
+}
+
+// 2. Carrega as métricas dos cards, custos financeiros e o status de restrição diária
 async function carregarMetricasFila() {
   const supabase = (typeof getSupabaseClient === 'function' ? getSupabaseClient() : null) || window.supabaseClient;
   if (!supabase) return;
@@ -37,6 +62,16 @@ async function carregarMetricasFila() {
     const utc = agora.getTime() + agora.getTimezoneOffset() * 60000;
     const brasilia = new Date(utc - 3 * 3600000);
     const dataHoje = brasilia.toISOString().split("T")[0];
+
+    const anoAtual = brasilia.getFullYear();
+    const mesAtual = brasilia.getMonth(); // 0 a 11
+    const inicioMesISO = new Date(Date.UTC(anoAtual, mesAtual, 1, 0, 0, 0)).toISOString();
+
+    const nomesMeses = [
+      "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+      "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+    ];
+    const nomeMesCorrente = nomesMeses[mesAtual];
 
     // Consulta controle_envios_diarios
     const { data: controle } = await supabase
@@ -58,6 +93,70 @@ async function carregarMetricasFila() {
     // Atualiza Card Enviadas Hoje
     const elEnviadosHoje = document.getElementById("metricFilaEnviadosHoje");
     if (elEnviadosHoje) elEnviadosHoje.textContent = totalEnviadosHoje;
+
+    // Apuração financeira das mensagens enviadas no mês corrente
+    let todasEnviadasMes = [];
+    let fromRange = 0;
+    while (true) {
+      const { data: batch, error: errBatch } = await supabase
+        .from("fila_mensagens_whatsapp")
+        .select("id, tipo, tipo_envio, dados_template, status, enviado_em, created_at")
+        .eq("status", "enviado")
+        .gte("enviado_em", inicioMesISO)
+        .range(fromRange, fromRange + 999);
+
+      if (errBatch || !batch || batch.length === 0) break;
+      todasEnviadasMes = todasEnviadasMes.concat(batch);
+      if (batch.length < 1000) break;
+      fromRange += 1000;
+    }
+
+    let countUtilHoje = 0;
+    let countMktHoje = 0;
+    let countUtilMes = 0;
+    let countMktMes = 0;
+
+    todasEnviadasMes.forEach(item => {
+      const cat = categorizarMensagemMeta(item);
+      const dataEnv = (item.enviado_em || item.created_at || "").split("T")[0];
+
+      if (cat === "MARKETING") {
+        countMktMes++;
+        if (dataEnv === dataHoje) countMktHoje++;
+      } else {
+        countUtilMes++;
+        if (dataEnv === dataHoje) countUtilHoje++;
+      }
+    });
+
+    const totalHojeCalculado = countUtilHoje + countMktHoje;
+    const totalMesCalculado = countUtilMes + countMktMes;
+
+    if (elEnviadosHoje && totalHojeCalculado > 0) {
+      elEnviadosHoje.textContent = Math.max(totalEnviadosHoje, totalHojeCalculado);
+    }
+
+    const custoHoje = (countUtilHoje * VALORES_META_BRL.UTILITY) + (countMktHoje * VALORES_META_BRL.MARKETING);
+    const custoMes = (countUtilMes * VALORES_META_BRL.UTILITY) + (countMktMes * VALORES_META_BRL.MARKETING);
+
+    const formatarMoeda = (val) => val.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+    // Atualiza Card de Hoje
+    const elCustoHoje = document.getElementById("metricFilaCustoHoje");
+    const elDetalheHoje = document.getElementById("metricFilaDetalheHoje");
+    if (elCustoHoje) elCustoHoje.textContent = formatarMoeda(custoHoje);
+    if (elDetalheHoje) elDetalheHoje.textContent = `${countUtilHoje} Utilidade • ${countMktHoje} Marketing`;
+
+    // Atualiza Card do Mês
+    const elCustoMes = document.getElementById("metricFilaCustoMes");
+    const elTotalMes = document.getElementById("metricFilaTotalMes");
+    const elNomeMes = document.getElementById("metricFilaNomeMesCorrente");
+    const elDetalheMes = document.getElementById("metricFilaDetalheMes");
+
+    if (elCustoMes) elCustoMes.textContent = formatarMoeda(custoMes);
+    if (elTotalMes) elTotalMes.textContent = totalMesCalculado;
+    if (elNomeMes) elNomeMes.textContent = `${nomeMesCorrente}/${anoAtual}`;
+    if (elDetalheMes) elDetalheMes.textContent = `${countUtilMes} Utilidade • ${countMktMes} Marketing`;
 
     // Consulta fila_mensagens_whatsapp para contadores
     const { count: pendentesCount } = await supabase
