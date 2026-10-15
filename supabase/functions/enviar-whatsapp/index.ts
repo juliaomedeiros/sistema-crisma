@@ -1,5 +1,5 @@
 // supabase/functions/enviar-whatsapp/index.ts
-// Proxy seguro para Evolution Go (Oracle Cloud) com tratamento estruturado de erros
+// Proxy de envio de WhatsApp: Exclusivo Meta Cloud API Oficial (Sem Evolution Go)
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
@@ -19,6 +19,19 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
+function normalizarTelefone(telefone: string): string {
+  let numLimpo = String(telefone || "").replace(/\D/g, "").replace(/^0+/, "");
+  if (!numLimpo) return "";
+  if (numLimpo.startsWith("55") && (numLimpo.length === 12 || numLimpo.length === 13)) {
+    return numLimpo;
+  } else if (numLimpo.length === 10 || numLimpo.length === 11) {
+    return `55${numLimpo}`;
+  } else if (numLimpo.length === 8 || numLimpo.length === 9) {
+    return `5583${numLimpo}`;
+  }
+  return numLimpo.startsWith("55") ? numLimpo : `55${numLimpo}`;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -28,180 +41,141 @@ serve(async (req) => {
 
   try {
     if (req.method !== "POST") {
-      return jsonResponse(
-        {
-          ok: false,
-          requestId,
-          error: "Método não permitido",
-        },
-        405
-      );
+      return jsonResponse({ ok: false, requestId, error: "Método não permitido" }, 405);
     }
 
     const body = await req.json();
-    const { telefone, mensagem } = body ?? {};
+    const { telefone, mensagem, templateName, templateParams, dados_template } = body ?? {};
 
-    if (!telefone || !mensagem) {
-      return jsonResponse(
-        {
-          ok: false,
-          requestId,
-          error: "Telefone e mensagem são obrigatórios.",
-        },
-        400
-      );
+    if (!telefone) {
+      return jsonResponse({ ok: false, requestId, error: "Telefone é obrigatório." }, 400);
     }
 
-    const EVOLUTION_URL = Deno.env.get("EVOLUTION_GO_URL");
-    const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_GO_API_KEY");
-    const EVOLUTION_INSTANCE = Deno.env.get("EVOLUTION_GO_INSTANCE") || "crisma-mae-rainha";
+    const numFormatado = normalizarTelefone(telefone);
+    if (!numFormatado || numFormatado.length < 12) {
+      return jsonResponse({ ok: false, requestId, error: `Telefone inválido: ${telefone}` }, 400);
+    }
 
-    if (!EVOLUTION_URL || !EVOLUTION_API_KEY) {
-      console.error("Secrets da Evolution não configurados", {
-        requestId,
-        hasUrl: Boolean(EVOLUTION_URL),
-        hasApiKey: Boolean(EVOLUTION_API_KEY),
-      });
+    // Credenciais Meta Cloud API Oficial
+    const META_PHONE_ID = Deno.env.get("META_PHONE_ID");
+    const META_ACCESS_TOKEN = Deno.env.get("META_ACCESS_TOKEN");
 
+    if (!META_PHONE_ID || !META_ACCESS_TOKEN) {
+      console.error("Credenciais da Meta API ausentes nos secrets", { requestId });
       return jsonResponse(
         {
           ok: false,
           requestId,
-          error: "Configurações da Evolution API não encontradas no servidor.",
+          error: "Credenciais da Meta Cloud API (META_PHONE_ID / META_ACCESS_TOKEN) não configuradas no servidor.",
         },
         500
       );
     }
 
-    // Normalização Inteligente para WhatsApp (DDD 83 Padrão da Paraíba se ausente)
-    let numLimpo = String(telefone || "").replace(/\D/g, "").replace(/^0+/, "");
-    let numFormatado = numLimpo;
+    let metaPayload: any = null;
+    let finalTplName = templateName || dados_template?.template;
+    let finalTplParams = templateParams || dados_template?.params || [];
 
-    if (numLimpo.startsWith("55") && (numLimpo.length === 12 || numLimpo.length === 13)) {
-      numFormatado = numLimpo;
-    } else if (numLimpo.length === 10 || numLimpo.length === 11) {
-      numFormatado = `55${numLimpo}`;
-    } else if (numLimpo.length === 8 || numLimpo.length === 9) {
-      numFormatado = `5583${numLimpo}`;
-    } else {
-      numFormatado = numLimpo.startsWith("55") ? numLimpo : `55${numLimpo}`;
+    // Auto-detecção de template oficial se apenas mensagem for fornecida
+    if (!finalTplName && mensagem) {
+      const nomeDest = (mensagem.match(/Olá,\s*([^.]+)\./i)?.[1] || "Crismando").trim();
+      if (mensagem.includes("Confirmamos o recebimento da sua")) {
+        finalTplName = "comprovante_pagamento_crisma";
+        const mes = (mensagem.match(/mês\(es\):\s*\*([^*]+)\*/i)?.[1] || "Mensalidade").trim();
+        const valor = (mensagem.match(/Valor(?:\s*Total)?:\s*R\$\s*([\d,.]+)/i)?.[1] || "10,00").trim();
+        finalTplParams = [nomeDest, mes, valor];
+      } else if (mensagem.includes("Passando para lembrar sobre a contribuição")) {
+        finalTplName = "lembrete_mensalidade_crisma";
+        const mes = (mensagem.match(/mês de:\s*\*([^*]+)\*/i)?.[1] || mensagem.match(/mês de\s*\*([^*]+)\*/i)?.[1] || "Mês Corrente").trim();
+        const valor = (mensagem.match(/Valor:\s*R\$\s*([\d,.]+)/i)?.[1] || "10,00").trim();
+        finalTplParams = [nomeDest, mes, valor];
+      } else if (mensagem.includes("Registramos a sua ausência")) {
+        finalTplName = "aviso_ausencia_crisma";
+        const dataEnc = (mensagem.match(/(\d{2}\/\d{2}\/\d{4})/)?.[1] || "").trim();
+        const faltas = (mensagem.match(/\*(\d+)\s*falta/i)?.[1] || "1").trim();
+        finalTplParams = [nomeDest, dataEnc, faltas];
+      } else {
+        finalTplName = "comunicado_geral_crisma";
+        const textoLimpo = mensagem.replace(/^Paz e bem,?\s*[^!.]+!/i, "").replace(/Pastoral da Crisma.*$/is, "").trim();
+        finalTplParams = [nomeDest, textoLimpo];
+      }
     }
 
-    const payload = {
-      instance: EVOLUTION_INSTANCE,
-      number: numFormatado,
-      text: mensagem,
-      options: {
-        delay: 1200,
-        presence: "composing",
-        linkPreview: false,
-      },
-      textMessage: {
-        text: mensagem,
-      },
-    };
+    if (finalTplName) {
+      // Disparo via Template Oficial Meta
+      metaPayload = {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: numFormatado,
+        type: "template",
+        template: {
+          name: finalTplName,
+          language: { code: "pt_BR" },
+          components: finalTplParams.length > 0 ? [
+            {
+              type: "body",
+              parameters: finalTplParams.map((p: any) => ({
+                type: "text",
+                text: String(p ?? ""),
+              })),
+            },
+          ] : [],
+        },
+      };
+    } else if (mensagem) {
+      // Envio como texto livre (janela de atendimento)
+      metaPayload = {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: numFormatado,
+        type: "text",
+        text: { preview_url: false, body: mensagem },
+      };
+    } else {
+      return jsonResponse({ ok: false, requestId, error: "Mensagem ou template obrigatório para envio." }, 400);
+    }
 
-    const cleanBaseUrl = EVOLUTION_URL.replace(/\/+$/, "");
-    let targetUrl = `${cleanBaseUrl}/send/text`;
-
-    console.log("Enviando para Evolution Go", {
-      requestId,
-      targetUrl,
-      instance: EVOLUTION_INSTANCE,
-      number: numFormatado,
-      messageLength: mensagem.length,
-    });
-
-    const startedAt = Date.now();
-
-    // Controller para timeout de 15 segundos
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-    let evoResponse: Response;
-    try {
-      evoResponse = await fetch(targetUrl, {
+    const metaRes = await fetch(
+      `https://graph.facebook.com/v21.0/${META_PHONE_ID}/messages`,
+      {
         method: "POST",
         headers: {
+          Authorization: `Bearer ${META_ACCESS_TOKEN}`,
           "Content-Type": "application/json",
-          "apikey": EVOLUTION_API_KEY,
         },
-        body: JSON.stringify(payload),
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timeoutId);
-    }
+        body: JSON.stringify(metaPayload),
+      }
+    );
 
-    const evoText = await evoResponse.text();
-    const durationMs = Date.now() - startedAt;
+    const metaText = await metaRes.text();
+    let metaJson: any = {};
+    try { metaJson = JSON.parse(metaText); } catch {}
 
-    console.log("Resposta da Evolution Go", {
-      requestId,
-      status: evoResponse.status,
-      durationMs,
-      response: evoText.slice(0, 1000),
-    });
-
-    let evoBody: any = evoText;
-    try {
-      evoBody = JSON.parse(evoText);
-    } catch {
-      // Mantém string se não for JSON
-    }
-
-    // Verificar erro 463 ou recusas do WhatsApp
-    const isError463 =
-      evoText.includes("463") ||
-      (typeof evoBody === "object" && evoBody?.error?.includes("463"));
-
-    if (!evoResponse.ok || isError463) {
-      console.warn("⚠️ Recusa/Erro no envio via Evolution Go", {
+    if (metaRes.ok && metaJson?.messages?.length > 0) {
+      console.log(`✅ [Meta API] Mensagem entregue via Meta! MessageID: ${metaJson.messages[0].id}`);
+      return jsonResponse({
+        ok: true,
+        canal: "meta_cloud_api",
+        messageId: metaJson.messages[0].id,
         requestId,
-        status: evoResponse.status,
-        isError463,
-        details: evoBody,
+        data: metaJson,
       });
-
+    } else {
+      console.warn(`⚠️ [Meta API] Recusa da Meta:`, metaText);
       return jsonResponse({
         ok: false,
+        canal: "meta_cloud_api",
         requestId,
-        evolutionStatus: evoResponse.status,
-        isError463,
-        errorCode: isError463 ? 463 : evoResponse.status,
-        error: isError463
-          ? "O WhatsApp recusou o envio imediato para este número."
-          : "Falha ao enviar mensagem via Evolution Go.",
-        details: evoBody,
-      }, 200); // Retorna HTTP 200 para a aplicação client-side poder tratar o reagendamento graciosamente
+        error: metaJson?.error?.message || "Falha no envio via Meta API Oficial.",
+        details: metaJson,
+      }, 200);
     }
 
-    return jsonResponse({
-      ok: true,
-      requestId,
-      evolutionStatus: evoResponse.status,
-      data: evoBody,
-    }, 200);
-
   } catch (err: any) {
-    const isAbort = err?.name === "AbortError";
-    console.error("Erro não tratado na Edge Function", {
+    return jsonResponse({
+      ok: false,
       requestId,
-      isTimeout: isAbort,
-      error: err?.message || String(err),
-    });
-
-    return jsonResponse(
-      {
-        ok: false,
-        requestId,
-        isTimeout: isAbort,
-        error: isAbort
-          ? "Tempo limite de resposta com o servidor WhatsApp excedido."
-          : (err?.message || "Erro interno ao enviar mensagem."),
-      },
-      200
-    );
+      error: err?.message || "Erro interno ao processar envio.",
+    }, 500);
   }
 });
-

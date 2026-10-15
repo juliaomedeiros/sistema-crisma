@@ -511,26 +511,31 @@
                 <!-- Central de Monitoramento da Fila de Mensagens e Controle Anti-Ban -->
                 <div class="section" id="secaoMonitoramentoFila">
                     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 15px;">
-                        <h3 style="margin: 0;">📊 Central de Monitoramento — Fila de Mensagens WhatsApp</h3>
-                        <button class="btn btn-info" style="padding: 6px 14px; font-size: 13px;" onclick="inicializarDashboardFila()">
-                            🔄 Atualizar Fila
-                        </button>
+                        <h3 style="margin: 0;">📊 Central de Monitoramento — Fila de Mensagens WhatsApp (Meta Cloud API)</h3>
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                            <button class="btn btn-warning" style="padding: 6px 14px; font-size: 13px;" onclick="reenviarTodasFalhasFila()">
+                                🔄 Reenviar Todas as Falhas
+                            </button>
+                            <button class="btn btn-info" style="padding: 6px 14px; font-size: 13px;" onclick="inicializarDashboardFila()">
+                                🔄 Atualizar Fila
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Banner de Alerta do Timelock (Exibido apenas quando ativo) -->
                     <div id="bannerTimelockAlert" style="display: none; background: #fde8e8; border: 2px solid #e74c3c; border-radius: 8px; padding: 15px; margin-bottom: 20px; color: #900;">
                         <div style="display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: bold; margin-bottom: 8px;">
                             <span>🚨</span>
-                            <span>RESTRIÇÃO WHATSAPP ATIVA (NotifyAccountReachoutTimelock)</span>
+                            <span>RESTRIÇÃO TEMPORÁRIA NO WHATSAPP</span>
                         </div>
                         <p style="font-size: 13.5px; margin: 0 0 10px 0; line-height: 1.4;">
-                            O WhatsApp aplicou uma trava temporária nesta conta por suspeita de automação. A fila de mensagens foi <strong>CONGELADA automaticamente</strong> para evitar banimento permanente.
+                            A conta apresentou uma restrição temporária. A fila de mensagens foi pausada automaticamente.
                         </p>
                         <div style="background: white; border: 1px solid #f8b4b4; padding: 10px 14px; border-radius: 6px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; font-size: 13px;">
                             <div>⏰ <strong>Desbloqueio previsto:</strong> <span id="dataExpiracaoTimelock">-</span></div>
                             <div>⏳ <strong>Tempo restante:</strong> <span id="tempoRestanteTimelock" style="color: #c0392b; font-weight: bold;">-</span></div>
                         </div>
-                        <small style="display: block; margin-top: 8px; color: #7f1d1d;">💡 O worker do servidor retomará os envios automaticamente assim que o prazo expirar. Não force envios nem reconecte.</small>
+                        <small style="display: block; margin-top: 8px; color: #7f1d1d;">💡 O worker do servidor retomará os envios automaticamente assim que o prazo expirar.</small>
                     </div>
 
                     <!-- Cards de Métricas e Limite Anti-Ban -->
@@ -552,30 +557,30 @@
 
                         <div class="stat-card" style="background: linear-gradient(45deg, #8e44ad, #9b59b6);">
                             <div class="stat-number" id="metricFilaReagendadas">0</div>
-                            <div>⏳ Reagendadas (463/500)</div>
+                            <div>⏳ Reagendadas / Aguardando</div>
                         </div>
 
                         <div class="stat-card" style="background: linear-gradient(45deg, #2c3e50, #34495e);">
-                            <div class="stat-number" id="metricFilaLimiteHoje" style="font-size: 1.8em;">0 / 60</div>
-                            <div>🛡️ Teto Seguro Diário</div>
+                            <div class="stat-number" id="metricFilaLimiteHoje" style="font-size: 1.8em;">0 / 250</div>
+                            <div>🛡️ Teto Seguro Diário (Meta API)</div>
                             <div style="background: rgba(255,255,255,0.3); height: 6px; border-radius: 3px; margin-top: 8px; overflow: hidden;">
                                 <div id="barraFilaLimiteHoje" style="background: #2ecc71; height: 100%; width: 0%; transition: width 0.3s;"></div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Status da Instância Evolution Go -->
+                    <!-- Status da Conexão Meta Cloud API Oficial -->
                     <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 15px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
                         <div>
                             <div style="display: flex; align-items: center; gap: 10px;">
-                                <strong style="color: #1e293b; font-size: 14px;">📡 Conexão da Instância:</strong>
-                                <span id="badgeInstanciaStatus" class="badge" style="background: #f39c12; color: white; padding: 4px 10px; border-radius: 4px; font-size: 12px;">⏳ Testando...</span>
+                                <strong style="color: #1e293b; font-size: 14px;">📡 Conexão WhatsApp:</strong>
+                                <span id="badgeInstanciaStatus" class="badge" style="background: #27ae60; color: white; padding: 4px 10px; border-radius: 4px; font-size: 12px;">🟢 Meta Cloud API Oficial</span>
                             </div>
-                            <small id="txtInstanciaDetalhes" style="color: #64748b; font-size: 12px; margin-top: 4px; display: block;">Checando comunicação com o Evolution Go...</small>
+                            <small id="txtInstanciaDetalhes" style="color: #64748b; font-size: 12px; margin-top: 4px; display: block;">Disparos 100% integrados à API Oficial da Meta (sem risco de banimento e sem Evolution Go).</small>
                         </div>
                         <div style="display: flex; gap: 10px;">
-                            <button class="btn btn-sm btn-info" style="padding: 6px 12px; font-size: 12px;" onclick="checarStatusInstanciaEvolution()">
-                                🔄 Testar Conexão
+                            <button class="btn btn-sm btn-info" style="padding: 6px 12px; font-size: 12px;" onclick="checarStatusMetaCloudApi()">
+                                🔄 Testar Conexão Meta
                             </button>
                         </div>
                     </div>
@@ -600,9 +605,10 @@
                                         <th>Destinatário</th>
                                         <th>Telefone</th>
                                         <th>Tipo de Envio</th>
+                                        <th>Gerada em</th>
                                         <th>Status</th>
                                         <th>Detalhes do Erro / Status</th>
-                                        <th>Ação</th>
+                                        <th>Ações</th>
                                     </tr>
                                 </thead>
                                 <tbody id="corpoTabelaFilaMensagens">

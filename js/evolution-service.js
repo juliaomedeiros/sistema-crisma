@@ -9,7 +9,7 @@ window.detalhesDisparoAtual = {
   pausaRestante: 0
 };
 
-// Envio de Texto via Supabase Edge Function (Proxy Seguro) com Fallback
+// Envio de Mensagem via Supabase Edge Function (Meta Cloud API Oficial)
 async function enviarTextoEvolutionGo(telefone, mensagem) {
   try {
     const normalizarFn = (typeof normalizarTelefoneWhatsApp === 'function') 
@@ -31,88 +31,41 @@ async function enviarTextoEvolutionGo(telefone, mensagem) {
 
     const supabaseInst = (typeof getSupabaseClient === 'function' ? getSupabaseClient() : null) || window.supabaseClient;
 
-    // 1. Tenta envio prioritário via Supabase Edge Function (Chave 100% segura no backend)
     if (supabaseInst && supabaseInst.functions) {
-      try {
-        const { data, error } = await supabaseInst.functions.invoke("enviar-whatsapp", {
-          body: { telefone: numFormatado, mensagem: mensagem }
-        });
+      const { data, error } = await supabaseInst.functions.invoke("enviar-whatsapp", {
+        body: { telefone: numFormatado, mensagem: mensagem }
+      });
 
-        if (!error && data) {
-          if (data.ok) {
-            console.log(`✅ [Edge Function] Mensagem enviada com sucesso para ${numFormatado}`);
-            return { ok: true };
-          } else {
-            console.warn(`⚠️ [Edge Function] Recusa de envio para ${numFormatado}:`, data.error || data);
-            return {
-              ok: false,
-              isError463: Boolean(data.isError463 || data.errorCode === 463),
-              errorCode: data.errorCode || 500,
-              mensagemErro: data.error || "Recusa de envio via WhatsApp"
-            };
-          }
+      if (!error && data) {
+        if (data.ok) {
+          console.log(`✅ [Meta Cloud API] Mensagem enviada com sucesso para ${numFormatado}`);
+          return { ok: true, data };
+        } else {
+          console.warn(`⚠️ [Meta Cloud API] Recusa de envio para ${numFormatado}:`, data.error || data);
+          return {
+            ok: false,
+            errorCode: data.errorCode || 500,
+            mensagemErro: data.error || "Recusa de envio via Meta WhatsApp"
+          };
         }
-        if (error) {
-          console.warn("⚠️ [Edge Function] Erro HTTP na comunicação com Edge Function:", error);
-        }
-      } catch (fnErr) {
-        console.warn("⚠️ [Edge Function] Exceção ao chamar Supabase Function. Tentando modo direto...", fnErr);
+      }
+      if (error) {
+        console.warn("⚠️ [Meta Cloud API] Erro na Edge Function:", error);
+        return { ok: false, mensagemErro: error.message || "Erro na Edge Function" };
       }
     }
 
-    // 2. Fallback Direto (caso a Edge Function ainda não esteja implantada)
-    const envObj = typeof ENV !== 'undefined' ? ENV : null;
-    const baseUrl = envObj?.EVOLUTION_GO_URL || envObj?.EVOLUTION_API_URL;
-    const apiKey = envObj?.EVOLUTION_GO_API_KEY || envObj?.EVOLUTION_API_KEY;
-    const instanceName = envObj?.EVOLUTION_GO_INSTANCE || envObj?.EVOLUTION_INSTANCE_NAME || "crisma-mae-rainha";
-
-    if (!baseUrl || !apiKey || apiKey === "SUA_API_KEY_AQUI") {
-      console.warn("⚠️ Evolution Go não configurado no env.js nem na Edge Function.");
-      return false;
-    }
-
-    const urlPrimary = `${baseUrl.replace(/\/$/, "")}/send/text`;
-
-    const payload = {
-      instance: instanceName,
-      number: numFormatado,
-      text: mensagem,
-      options: {
-        delay: 1200,
-        presence: "composing",
-        linkPreview: false
-      },
-      textMessage: {
-        text: mensagem
-      }
-    };
-
-    let response = await fetch(urlPrimary, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "apikey": apiKey
-      },
-      body: JSON.stringify(payload)
-    });
-
-    if (response.ok || response.status === 200 || response.status === 201) {
-      console.log(`✅ [Modo Direto] Mensagem enviada com sucesso para ${numFormatado}`);
-      return true;
-    } else {
-      const errTxt = await response.text();
-      console.error(`❌ Falha no disparo via Evolution Go (${response.status}):`, errTxt);
-      return false;
-    }
-
+    return { ok: false, mensagemErro: "Supabase Client não inicializado" };
   } catch (error) {
-    console.error("❌ Erro na requisição para Evolution Go:", error);
+    console.error("❌ Erro no disparo via Meta API:", error);
     return false;
   }
 }
 
 // Alias para manter compatibilidade com chamadas anteriores
 const enviarTextoEvolutionAPI = enviarTextoEvolutionGo;
+const enviarTextoWhatsApp = enviarTextoEvolutionGo;
+window.enviarTextoWhatsApp = enviarTextoEvolutionGo;
 
 // Algoritmo que filtra APENAS os crismandos que NÃO PAGARAM o mês em questão
 function buscarCrismandosDevedores(nomeMesFiltro, anoFiltro) {
@@ -341,7 +294,11 @@ async function iniciarDisparoLote(mesFiltro, anoFiltro) {
       mensagem_texto: msg,
       status: 'pendente',
       prioridade: 4,
-      tentativas: 0
+      tentativas: 0,
+      dados_template: {
+        template: 'lembrete_mensalidade_crisma',
+        params: [nome, `${mes}/${ano}`, valorStr]
+      }
     };
   });
 
@@ -351,7 +308,7 @@ async function iniciarDisparoLote(mesFiltro, anoFiltro) {
 
     fecharModalCobranca();
 
-    alert(`✅ ${registros.length} lembrete(s) de cobrança foram agendados na fila do servidor com sucesso!\n\n🛡️ O worker do Supabase processará os envios automaticamente respeitando as regras Anti-Ban (60/dia).\n📱 Ao concluir o lote, o coordenador será notificado no WhatsApp.\n💻 Você pode fechar o sistema tranquilamente.`);
+    alert(`✅ ${registros.length} lembrete(s) de cobrança foram agendados na fila do servidor com sucesso!\n\n🛡️ O worker da Meta Cloud API processará os envios automaticamente (teto de 250/dia).\n📱 Ao concluir o lote, o coordenador será notificado no WhatsApp.\n💻 Você pode fechar o sistema tranquilamente.`);
 
     if (typeof carregarMetricasFila === 'function') carregarMetricasFila();
     if (typeof carregarTabelaMensagensFila === 'function') carregarTabelaMensagensFila();
@@ -462,7 +419,7 @@ async function dispararRecibosPendentesDoDia() {
     recibosPendentesEncontro = [];
     atualizarContadorRecibosPendentes();
 
-    alert(`✅ ${registros.length} recibo(s) agendados com sucesso na fila do servidor!\n\n🛡️ Os comprovantes serão enviados em segundo plano.\n📱 O coordenador será notificado no WhatsApp ao término do lote.`);
+    alert(`✅ ${registros.length} recibo(s) agendados com sucesso na fila do servidor!\n\n🛡️ Os comprovantes serão enviados em segundo plano via Meta Cloud API Oficial (teto de 250/dia).\n📱 O coordenador será notificado no WhatsApp ao término do lote.`);
 
     if (typeof carregarMetricasFila === 'function') carregarMetricasFila();
     if (typeof carregarTabelaMensagensFila === 'function') carregarTabelaMensagensFila();
@@ -613,7 +570,11 @@ async function iniciarDisparoAvisosEmLote() {
       mensagem_texto: msgPersonalizada,
       status: 'pendente',
       prioridade: 5,
-      tentativas: 0
+      tentativas: 0,
+      dados_template: {
+        template: 'comunicado_geral_crisma',
+        params: [nome, msgPersonalizada]
+      }
     };
   });
 
@@ -626,7 +587,7 @@ async function iniciarDisparoAvisosEmLote() {
     const logBox = document.getElementById("logDisparoAvisos");
     if (containerProgresso) containerProgresso.style.display = "block";
     if (logBox) {
-      logBox.innerHTML = `[${new Date().toLocaleTimeString()}] 🚀 ${registros.length} aviso(s) agendados com sucesso na fila do servidor!\n[${new Date().toLocaleTimeString()}] 🛡️ Regra Anti-Ban ativa: até 60 envios/dia em horário comercial (08:00 às 20:00).\n[${new Date().toLocaleTimeString()}] 📱 O coordenador receberá notificação no WhatsApp ao finalizar o lote.\n[${new Date().toLocaleTimeString()}] 💻 Você pode fechar o navegador tranquilamente.`;
+      logBox.innerHTML = `[${new Date().toLocaleTimeString()}] 🚀 ${registros.length} aviso(s) agendados com sucesso na fila do servidor!\n[${new Date().toLocaleTimeString()}] 🛡️ Meta Cloud API Oficial: teto de até 250 envios/dia em horário comercial (08:00 às 20:00).\n[${new Date().toLocaleTimeString()}] 📱 O coordenador receberá notificação no WhatsApp ao finalizar o lote.\n[${new Date().toLocaleTimeString()}] 💻 Você pode fechar o navegador tranquilamente.`;
     }
     const elPct = document.getElementById("porcentagemProgressoAvisos");
     if (elPct) elPct.innerText = "100%";
@@ -639,7 +600,7 @@ async function iniciarDisparoAvisosEmLote() {
     const elTitulo = document.getElementById("tituloProgressoAvisos");
     if (elTitulo) elTitulo.innerText = "✅ Agendado no Servidor!";
 
-    alert(`✅ ${registros.length} aviso(s) foram agendados na fila do servidor com sucesso!\n\n🛡️ O envio será realizado a até 60 mensagens por dia no horário comercial (08:00 às 20:00).\n📱 Ao concluir o lote de 180 crismandos, o coordenador receberá o relatório no WhatsApp.\n💻 Você pode fechar o sistema tranquilamente.`);
+    alert(`✅ ${registros.length} aviso(s) foram agendados na fila do servidor com sucesso!\n\n🛡️ O envio será realizado via Meta Cloud API Oficial (teto de até 250 mensagens por dia no horário comercial).\n📱 Ao concluir o lote de mensagens, o coordenador receberá o relatório no WhatsApp.\n💻 Você pode fechar o sistema tranquilamente.`);
 
     if (typeof carregarMetricasFila === 'function') carregarMetricasFila();
     if (typeof carregarTabelaMensagensFila === 'function') carregarTabelaMensagensFila();
@@ -769,7 +730,7 @@ function exibirAlertaFalhasEnvio(listaFalhas) {
         <td style="color: #c0392b; font-size: 12px;">${item.erro_log || "Falha na entrega"}</td>
         <td><small>${dataCriacao}</small></td>
         <td>
-          <button class="btn btn-warning" style="padding: 3px 8px; font-size: 11px;" onclick="tentarReenviarMensagemFalhada(${item.id})">🔄 Reenviar</button>
+          <button class="btn btn-warning" style="padding: 3px 8px; font-size: 11px;" onclick="tentarReenviarMensagemFalhada('${item.id}')">🔄 Reenviar</button>
         </td>
       </tr>
     `;

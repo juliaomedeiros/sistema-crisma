@@ -1,6 +1,6 @@
 // supabase/functions/processar-fila-whatsapp/index.ts
 // Worker autônomo acionado pelo pg_cron a cada 2 minutos
-// Gerencia limites diários (60/dia), horário comercial, anti-ban inteligente e alerta ao coordenador
+// Exclusivo Meta Cloud API Oficial (Limite de 250 msgs/dia, sem Evolution Go)
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -24,10 +24,8 @@ function normalizarTelefone(telefone: string): string {
   return numLimpo.startsWith("55") ? numLimpo : `55${numLimpo}`;
 }
 
-// Retorna data e hora atual no fuso horário de Brasília (UTC-3)
 function getAgoraBrasilia(): { dataHoje: string; hora: number; minuto: number; agoraISO: string } {
   const agora = new Date();
-  // Brasília é UTC-3
   const utc = agora.getTime() + agora.getTimezoneOffset() * 60000;
   const brasiliaTime = new Date(utc - 3 * 3600000);
 
@@ -38,12 +36,7 @@ function getAgoraBrasilia(): { dataHoje: string; hora: number; minuto: number; a
   const hora = brasiliaTime.getHours();
   const minuto = brasiliaTime.getMinutes();
 
-  return {
-    dataHoje,
-    hora,
-    minuto,
-    agoraISO: agora.toISOString(),
-  };
+  return { dataHoje, hora, minuto, agoraISO: agora.toISOString() };
 }
 
 serve(async (req) => {
@@ -60,13 +53,22 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ||
       Deno.env.get("SUPABASE_ANON_KEY") ||
       "";
-    const EVOLUTION_URL = Deno.env.get("EVOLUTION_GO_URL");
-    const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_GO_API_KEY");
-    const EVOLUTION_INSTANCE = Deno.env.get("EVOLUTION_GO_INSTANCE") || "crisma-mae-rainha";
 
-    if (!supabaseUrl || !supabaseServiceKey || !EVOLUTION_URL || !EVOLUTION_API_KEY) {
-      console.error("Configurações ausentes para o worker", { requestId });
+    // Meta API Secrets Obrigatórios
+    const META_PHONE_ID = Deno.env.get("META_PHONE_ID");
+    const META_ACCESS_TOKEN = Deno.env.get("META_ACCESS_TOKEN");
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error("Configurações do Supabase ausentes", { requestId });
       return new Response(JSON.stringify({ error: "Configurações incompletas no servidor." }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (!META_PHONE_ID || !META_ACCESS_TOKEN) {
+      console.error("Credenciais da Meta API ausentes", { requestId });
+      return new Response(JSON.stringify({ error: "Credenciais da Meta API ausentes no Supabase." }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -74,9 +76,9 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // 1. REGRA ANTI-BAN: HORÁRIO COMERCIAL (08:00 às 20:00 - Brasília)
+    // 1. REGRA: HORÁRIO COMERCIAL (08:00 às 20:00 - Horário de Brasília)
     if (hora < 8 || hora >= 20) {
-      console.log(`🌙 [Worker Fila] Fora do horário comercial (${hora}h Brasília). Pausando até as 08:00.`);
+      console.log(`🌙 [Worker Fila - Meta] Fora do horário comercial (${hora}h Brasília). Pausando até as 08:00.`);
       return new Response(
         JSON.stringify({
           ok: true,
@@ -87,18 +89,18 @@ serve(async (req) => {
       );
     }
 
-    // 2. REGRA ANTI-BAN: JITTER ALEATÓRIO (Gaps naturais de pausa entre 2 e 4 min)
-    // 20% das chamadas do cron são puladas para criar intervalos humanos irregulares
-    if (Math.random() < 0.20) {
-      console.log(`🎲 [Worker Fila] Jitter natural ativado. Pulando execução para variar intervalo de envio.`);
-      return new Response(
-        JSON.stringify({ ok: true, pausado: true, motivo: "Jitter aleatório anti-padrão executado." }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    // 2. RECUPERAR MENSAGENS PRESAS EM 'processando' HÁ MAIS DE 10 MINUTOS
+    const dezMinutosAtras = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    await supabase
+      .from("fila_mensagens_whatsapp")
+      .update({ status: "pendente", updated_at: agoraISO })
+      .eq("status", "processando")
+      .lte("updated_at", dezMinutosAtras);
 
-    // 3. REGRA ANTI-BAN: VERIFICAR CONTROLE DIÁRIO (Teto de 60/dia e Timelock)
-    let { data: controle, error: errControle } = await supabase
+    // 3. CONTROLE DE VOLUME DIÁRIO (Teto de 250 msgs/dia na Meta)
+    const LIMITE_PADRAO = 250;
+
+    let { data: controle } = await supabase
       .from("controle_envios_diarios")
       .select("*")
       .eq("data", dataHoje)
@@ -107,269 +109,272 @@ serve(async (req) => {
     if (!controle) {
       const { data: novoControle } = await supabase
         .from("controle_envios_diarios")
-        .insert({ data: dataHoje, total_enviados: 0, limite_diario: 60 })
+        .insert({ data: dataHoje, total_enviados: 0, limite_diario: LIMITE_PADRAO })
         .select("*")
         .single();
-      controle = novoControle || { total_enviados: 0, limite_diario: 60, timelock_ativo: false };
+      controle = novoControle || { total_enviados: 0, limite_diario: LIMITE_PADRAO };
     }
 
-    // Verificar se timelock está ativo
-    if (controle.timelock_ativo) {
-      if (controle.timelock_expira && new Date(controle.timelock_expira) <= new Date()) {
-        // Expirou! Desbloquear
-        await supabase
-          .from("controle_envios_diarios")
-          .update({ timelock_ativo: false, timelock_expira: null })
-          .eq("data", dataHoje);
-        console.log(`🔓 [Worker Fila] Restrição Timelock expirou! Retomando envios normais.`);
-      } else {
-        console.warn(`⏳ [Worker Fila] Timelock ativo até ${controle.timelock_expira}. Fila congelada.`);
-        return new Response(
-          JSON.stringify({
-            ok: true,
-            pausado: true,
-            motivo: `Timelock ativo até ${controle.timelock_expira}. Fila congelada para proteção do número.`,
-          }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-    }
+    const limiteDiario = controle.limite_diario || LIMITE_PADRAO;
+    const totalHoje = controle.total_enviados || 0;
 
-    // Verificar teto diário de 60
-    const limiteDiario = controle.limite_diario || 60;
-    if (controle.total_enviados >= limiteDiario) {
-      console.log(`🛑 [Worker Fila] Limite diário de ${limiteDiario} envios atingido para hoje (${dataHoje}).`);
+    if (totalHoje >= limiteDiario) {
+      console.log(`🛑 [Worker Fila - Meta] Limite diário de ${limiteDiario} envios atingido para hoje (${dataHoje}).`);
       return new Response(
         JSON.stringify({
           ok: true,
           pausado: true,
-          motivo: `Limite diário atingido (${controle.total_enviados}/${limiteDiario}). O worker retomará amanhã às 08:00.`,
+          motivo: `Limite diário atingido (${totalHoje}/${limiteDiario}).`,
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // 4. VERIFICAR SE HÁ MENSAGEM REAGENDADA PRONTA (Prioridade 1)
-    let mensagemAlvo: any = null;
+    const quotaRestante = limiteDiario - totalHoje;
+    // Processa em lote de até 5 mensagens por ciclo de 2 min
+    const batchSize = Math.min(quotaRestante, 5);
+
+    // 4. SELEÇÃO DE MENSAGENS ALVO (Reagendadas prioritárias + Pendentes)
+    const alvos: any[] = [];
+
+    // Prioridade 1: Reagendadas cujo agendado_para já chegou
     const { data: reagendadas } = await supabase
       .from("fila_mensagens_whatsapp")
       .select("*")
       .in("status", ["reagendado_463", "reagendado_500"])
       .lte("agendado_para", agoraISO)
       .order("agendado_para", { ascending: true })
-      .limit(1);
+      .limit(batchSize);
 
     if (reagendadas && reagendadas.length > 0) {
-      mensagemAlvo = reagendadas[0];
-    } else {
-      // 5. SE NÃO HOUVER REAGENDADA, PEGAR A PRÓXIMA PENDENTE DA FILA (Prioridade 2)
+      alvos.push(...reagendadas);
+    }
+
+    // Prioridade 2: Pendentes normais até completar o lote
+    const vagas = batchSize - alvos.length;
+    if (vagas > 0) {
       const { data: pendentes } = await supabase
         .from("fila_mensagens_whatsapp")
         .select("*")
         .eq("status", "pendente")
         .order("prioridade", { ascending: true })
         .order("created_at", { ascending: true })
-        .limit(1);
+        .limit(vagas);
 
       if (pendentes && pendentes.length > 0) {
-        mensagemAlvo = pendentes[0];
+        alvos.push(...pendentes);
       }
     }
 
-    if (!mensagemAlvo) {
+    if (alvos.length === 0) {
       return new Response(
-        JSON.stringify({ ok: true, processados: 0, message: "Fila limpa. Nenhuma mensagem pendente." }),
+        JSON.stringify({ ok: true, processados: 0, message: "Fila limpa. Nenhuma mensagem pendente no momento." }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Marcar como processando
-    await supabase
-      .from("fila_mensagens_whatsapp")
-      .update({ status: "processando", updated_at: agoraISO })
-      .eq("id", mensagemAlvo.id);
+    console.log(`🚀 [Worker Fila - Meta] Iniciando envio de lote com ${alvos.length} mensagem(ns)...`);
 
-    const textoFinal = mensagemAlvo.mensagem_texto || mensagemAlvo.mensagem || "";
-    const telefoneNorm = normalizarTelefone(mensagemAlvo.telefone);
+    let enviadosNestaRodada = 0;
+    let falhasNestaRodada = 0;
+    let novoTotalDiario = totalHoje;
 
-    if (!telefoneNorm || telefoneNorm.length < 12) {
+    for (const mensagemAlvo of alvos) {
+      // Marcar como processando
       await supabase
         .from("fila_mensagens_whatsapp")
-        .update({
-          status: "falha_definitiva",
-          erro_log: "Telefone inválido ou não cadastrado.",
-          updated_at: agoraISO,
-        })
+        .update({ status: "processando", updated_at: agoraISO })
         .eq("id", mensagemAlvo.id);
 
-      return new Response(
-        JSON.stringify({ ok: false, message: `Telefone inválido: ${mensagemAlvo.telefone}` }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+      const telefoneNorm = normalizarTelefone(mensagemAlvo.telefone);
+      const textoMsg = mensagemAlvo.mensagem_texto || mensagemAlvo.mensagem || "";
+      const nomeDest = mensagemAlvo.nome_destinatario || extrairNome(textoMsg) || "Crismando";
 
-    // 6. CALCULAR TEMPO DE COMPOSING HUMANO (35ms por caractere, min 3.5s, max 9.5s)
-    const composingMs = Math.min(9500, Math.max(3500, textoFinal.length * 35));
-
-    const cleanBaseUrl = EVOLUTION_URL.replace(/\/+$/, "");
-    const targetUrl = `${cleanBaseUrl}/send/text`;
-
-    const payload = {
-      instance: EVOLUTION_INSTANCE,
-      number: telefoneNorm,
-      text: textoFinal,
-      options: {
-        delay: composingMs,
-        presence: "composing",
-        linkPreview: false,
-      },
-      textMessage: {
-        text: textoFinal,
-      },
-    };
-
-    console.log(`📱 [Worker Fila] Enviando mensagem ID ${mensagemAlvo.id} para ${telefoneNorm}...`);
-
-    let evoResponse: Response;
-    let evoText = "";
-    try {
-      evoResponse = await fetch(targetUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: EVOLUTION_API_KEY,
-        },
-        body: JSON.stringify(payload),
-      });
-      evoText = await evoResponse.text();
-    } catch (fetchErr: any) {
-      console.error(`❌ [Worker Fila] Erro na requisição HTTP para Evolution:`, fetchErr);
-      evoResponse = new Response("timeout", { status: 504 });
-      evoText = String(fetchErr?.message || "Timeout na conexão com Evolution Go");
-    }
-
-    let evoBody: any = {};
-    try {
-      evoBody = JSON.parse(evoText);
-    } catch {}
-
-    const isError463 =
-      evoText.includes("463") ||
-      (typeof evoBody === "object" && evoBody?.error?.includes("463")) ||
-      evoText.includes("ReachoutTimelock");
-
-    // 7. TRATAMENTO DO RESULTADO DO DISPARO
-    if (evoResponse.ok && !isError463) {
-      // SUCESSO!
-      await supabase
-        .from("fila_mensagens_whatsapp")
-        .update({
-          status: "enviado",
-          enviado_em: agoraISO,
-          erro_log: null,
-          codigo_erro: 200,
-          updated_at: agoraISO,
-        })
-        .eq("id", mensagemAlvo.id);
-
-      // Incrementar contador diário
-      const novoTotal = (controle.total_enviados || 0) + 1;
-      await supabase
-        .from("controle_envios_diarios")
-        .update({ total_enviados: novoTotal, updated_at: agoraISO })
-        .eq("data", dataHoje);
-
-      console.log(`✅ [Worker Fila] Mensagem ${mensagemAlvo.id} enviada com sucesso! (${novoTotal}/${limiteDiario} hoje)`);
-
-      // 8. VERIFICAR SE O LOTE FOI 100% CONCLUÍDO (Para notificar Coordenador)
-      if (mensagemAlvo.lote_id) {
-        await checarENotificarConclusaoLote(supabase, mensagemAlvo.lote_id, EVOLUTION_URL, EVOLUTION_API_KEY, EVOLUTION_INSTANCE);
-      }
-
-      return new Response(
-        JSON.stringify({ ok: true, enviadoId: mensagemAlvo.id, totalHoje: novoTotal }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    } else if (isError463) {
-      // ERRO 463 / TIMELOCK DETECTADO
-      console.warn(`🚨 [Worker Fila] Erro 463 (Reachout Timelock) detectado ao enviar para ${telefoneNorm}!`);
-
-      // Congelar fila por 24 horas no controle_envios_diarios
-      const dataExpira = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-      await supabase
-        .from("controle_envios_diarios")
-        .update({ timelock_ativo: true, timelock_expira: dataExpira, updated_at: agoraISO })
-        .eq("data", dataHoje);
-
-      // Reagendar a mensagem para após o desbloqueio
-      await supabase
-        .from("fila_mensagens_whatsapp")
-        .update({
-          status: "reagendado_463",
-          agendado_para: dataExpira,
-          codigo_erro: 463,
-          erro_log: "WhatsApp recusou envio imediato (Reachout Timelock). Reagendado para 24h.",
-          updated_at: agoraISO,
-        })
-        .eq("id", mensagemAlvo.id);
-
-      // Notificar coordenador do bloqueio temporário
-      await notificarCoordenadorAlerta(
-        supabase,
-        "🚨 *ALERTA SISTEMA CRISMA:* O WhatsApp aplicou uma restrição temporária (Reachout Timelock). A fila de envios foi congelada automaticamente por 24 horas para proteger o número contra banimento permanente.",
-        EVOLUTION_URL,
-        EVOLUTION_API_KEY,
-        EVOLUTION_INSTANCE
-      );
-
-      return new Response(
-        JSON.stringify({ ok: false, error: "Reachout Timelock detectado. Fila congelada por 24h." }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    } else {
-      // OUTROS ERROS (500, Falha de rede, etc.)
-      const statusHttp = evoResponse.status || 500;
-      const tentativas = (mensagemAlvo.tentativas || 0) + 1;
-
-      if (tentativas >= 3) {
-        // Falha definitiva após 3 tentativas
+      if (!telefoneNorm || telefoneNorm.length < 12) {
         await supabase
           .from("fila_mensagens_whatsapp")
           .update({
             status: "falha_definitiva",
-            tentativas,
-            codigo_erro: statusHttp,
-            erro_log: `Falha após 3 tentativas. Erro: ${evoText.slice(0, 150)}`,
+            erro_log: "Telefone inválido ou não cadastrado.",
             updated_at: agoraISO,
           })
           .eq("id", mensagemAlvo.id);
-
-        console.warn(`❌ [Worker Fila] Mensagem ${mensagemAlvo.id} marcada como falha definitiva.`);
-      } else {
-        // Reagendar para 35 minutos
-        const dataReagendada = new Date(Date.now() + 35 * 60 * 1000).toISOString();
-        await supabase
-          .from("fila_mensagens_whatsapp")
-          .update({
-            status: "reagendado_500",
-            agendado_para: dataReagendada,
-            tentativas,
-            codigo_erro: statusHttp,
-            erro_log: `Instabilidade (${statusHttp}). Reagendado para 35min. Detalhes: ${evoText.slice(0, 100)}`,
-            updated_at: agoraISO,
-          })
-          .eq("id", mensagemAlvo.id);
-
-        console.log(`⏳ [Worker Fila] Mensagem ${mensagemAlvo.id} reagendada para 35min (Tentativa ${tentativas}/3).`);
+        falhasNestaRodada++;
+        continue;
       }
 
-      return new Response(
-        JSON.stringify({ ok: false, status: statusHttp, error: evoText.slice(0, 200) }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      // Determinar Template e Parâmetros
+      let templateName = "";
+      let templateParams: string[] = [];
+
+      if (mensagemAlvo.dados_template?.template) {
+        templateName = mensagemAlvo.dados_template.template;
+        templateParams = mensagemAlvo.dados_template.params || [];
+      } else {
+        const tipo = mensagemAlvo.tipo || mensagemAlvo.tipo_envio || "aviso_lote";
+
+        if (tipo === "cobranca") {
+          templateName = "lembrete_mensalidade_crisma";
+          templateParams = [
+            nomeDest,
+            extrairMesAno(textoMsg) || "Mês Corrente",
+            extrairValor(textoMsg) || "10,00",
+          ];
+        } else if (tipo === "recibo") {
+          templateName = "comprovante_pagamento_crisma";
+          templateParams = [
+            nomeDest,
+            extrairMesAno(textoMsg) || "Mensalidade",
+            extrairValor(textoMsg) || "10,00",
+          ];
+        } else if (tipo === "aviso_falta") {
+          templateName = "aviso_ausencia_crisma";
+          templateParams = [
+            nomeDest,
+            extrairData(textoMsg) || dataHoje,
+            extrairFaltas(textoMsg) || "1",
+          ];
+        } else {
+          templateName = "comunicado_geral_crisma";
+          templateParams = [nomeDest, limparTextoAviso(textoMsg)];
+        }
+      }
+
+      const metaPayload = {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: telefoneNorm,
+        type: "template",
+        template: {
+          name: templateName,
+          language: { code: "pt_BR" },
+          components: [
+            {
+              type: "body",
+              parameters: templateParams.map((p) => ({ type: "text", text: String(p || "") })),
+            },
+          ],
+        },
+      };
+
+      try {
+        const metaRes = await fetch(
+          `https://graph.facebook.com/v21.0/${META_PHONE_ID}/messages`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${META_ACCESS_TOKEN}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(metaPayload),
+          }
+        );
+
+        const metaText = await metaRes.text();
+        let metaJson: any = {};
+        try { metaJson = JSON.parse(metaText); } catch {}
+
+        if (metaRes.ok && metaJson?.messages?.length > 0) {
+          // Sucesso via Meta Cloud API!
+          await supabase
+            .from("fila_mensagens_whatsapp")
+            .update({
+              status: "enviado",
+              enviado_em: agoraISO,
+              erro_log: null,
+              codigo_erro: 200,
+              updated_at: agoraISO,
+            })
+            .eq("id", mensagemAlvo.id);
+
+          novoTotalDiario++;
+          enviadosNestaRodada++;
+
+          await supabase
+            .from("controle_envios_diarios")
+            .update({ total_enviados: novoTotalDiario, updated_at: agoraISO })
+            .eq("data", dataHoje);
+
+          console.log(`✅ [Worker Fila - Meta] Mensagem ${mensagemAlvo.id} enviada para ${telefoneNorm}! (${novoTotalDiario}/${limiteDiario})`);
+
+          if (mensagemAlvo.lote_id) {
+            await checarENotificarConclusaoLote(supabase, mensagemAlvo.lote_id, META_PHONE_ID, META_ACCESS_TOKEN);
+          }
+        } else {
+          // Meta Recusou
+          console.warn(`⚠️ [Worker Fila - Meta] Recusa da Meta para ${telefoneNorm}:`, metaText);
+          const erroMeta = metaJson?.error?.message || metaText;
+          const codigoMeta = metaJson?.error?.code || metaRes.status;
+
+          // Se for erro de template em análise (code 132000, 132001 ou mensagem de template), reagenda para 15 minutos sem falhar
+          const isTemplatePending = codigoMeta === 132000 || codigoMeta === 132001 || erroMeta.toLowerCase().includes("template");
+
+          if (isTemplatePending) {
+            const reagendarPara = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+            await supabase
+              .from("fila_mensagens_whatsapp")
+              .update({
+                status: "reagendado_500",
+                agendado_para: reagendarPara,
+                codigo_erro: codigoMeta,
+                erro_log: `Template (${templateName}) aguardando aprovação na Meta. Reagendado para 15 min.`,
+                updated_at: agoraISO,
+              })
+              .eq("id", mensagemAlvo.id);
+          } else {
+            // Outros erros
+            const tentativas = (mensagemAlvo.tentativas || 0) + 1;
+            if (tentativas >= 3) {
+              await supabase
+                .from("fila_mensagens_whatsapp")
+                .update({
+                  status: "falha_definitiva",
+                  tentativas,
+                  codigo_erro: codigoMeta,
+                  erro_log: `Meta API: ${erroMeta.slice(0, 200)}`,
+                  updated_at: agoraISO,
+                })
+                .eq("id", mensagemAlvo.id);
+            } else {
+              const dataReag = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+              await supabase
+                .from("fila_mensagens_whatsapp")
+                .update({
+                  status: "reagendado_500",
+                  agendado_para: dataReag,
+                  tentativas,
+                  codigo_erro: codigoMeta,
+                  erro_log: `Meta API: ${erroMeta.slice(0, 150)}`,
+                  updated_at: agoraISO,
+                })
+                .eq("id", mensagemAlvo.id);
+            }
+          }
+          falhasNestaRodada++;
+        }
+      } catch (metaErr: any) {
+        console.error("❌ [Worker Fila - Meta] Exceção de rede na Meta:", metaErr);
+        falhasNestaRodada++;
+      }
+
+      // Pequena pausa entre envios do lote (500ms)
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
+
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        processados: alvos.length,
+        enviados: enviadosNestaRodada,
+        falhas: falhasNestaRodada,
+        totalHoje: novoTotalDiario,
+        limiteDiario,
+      }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+
   } catch (err: any) {
-    console.error("❌ [Worker Fila] Erro não tratado:", err);
+    console.error("❌ [Worker Fila] Erro geral:", err);
     return new Response(JSON.stringify({ error: err?.message || String(err) }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -377,110 +382,71 @@ serve(async (req) => {
   }
 });
 
-// Checa se o lote_id foi concluído e, se sim, envia o relatório ao coordenador
+// Funções utilitárias de extração de parâmetros
+function extrairNome(txt: string): string {
+  const m = txt.match(/Olá,\s*([^.]+)\./i);
+  return m ? m[1].trim() : "Crismando";
+}
+
+function extrairMesAno(txt: string): string {
+  const m = txt.match(/mês\(es\):\s*\*([^*]+)\*/i) ||
+            txt.match(/mês de:\s*\*([^*]+)\*/i) ||
+            txt.match(/mês de\s*\*([^*]+)\*/i) ||
+            txt.match(/\*([A-Za-zçãõ\s,0-9\/]+)\*/i);
+  return m ? m[1].trim() : "Mês Corrente";
+}
+
+function extrairValor(txt: string): string {
+  const m = txt.match(/Valor(?:\s*Total)?:\s*R\$\s*([\d,.]+)/i) ||
+            txt.match(/R\$\s*([\d,.]+)/i);
+  return m ? m[1].trim() : "10,00";
+}
+
+function extrairData(txt: string): string {
+  const m = txt.match(/(\d{2}\/\d{2}\/\d{4})/);
+  return m ? m[1] : "";
+}
+
+function extrairFaltas(txt: string): string {
+  const m = txt.match(/\*(\d+)\s*falta/i) || txt.match(/(\d+)\s*falta/i);
+  return m ? m[1] : "1";
+}
+
+function limparTextoAviso(txt: string): string {
+  return txt
+    .replace(/^Paz e bem,?\s*[^!.]+!/i, "")
+    .replace(/Pastoral da Crisma.*$/is, "")
+    .trim();
+}
+
 async function checarENotificarConclusaoLote(
   supabase: any,
   loteId: string,
-  evoUrl: string,
-  evoApiKey: string,
-  evoInstance: string
+  metaPhoneId: string,
+  metaToken: string
 ) {
   try {
-    // Verificar se ainda há itens pendentes ou em processamento neste lote
     const { count: pendentesCount } = await supabase
       .from("fila_mensagens_whatsapp")
       .select("*", { count: "exact", head: true })
       .eq("lote_id", loteId)
       .in("status", ["pendente", "processando", "reagendado_463", "reagendado_500"]);
 
-    if (pendentesCount !== 0) {
-      // Ainda há mensagens a enviar neste lote
-      return;
-    }
+    if (pendentesCount !== 0) return;
 
-    // Lote finalizado! Coletar estatísticas
-    const { data: todosDoLote } = await supabase
+    const { data: todos } = await supabase
       .from("fila_mensagens_whatsapp")
       .select("*")
       .eq("lote_id", loteId);
 
-    if (!todosDoLote || todosDoLote.length === 0) return;
+    if (!todos || todos.length === 0) return;
 
-    const total = todosDoLote.length;
-    const sucessos = todosDoLote.filter((m: any) => m.status === "enviado").length;
-    const falhas = todosDoLote.filter((m: any) => m.status === "falha_definitiva");
-    const tipo = todosDoLote[0]?.tipo || todosDoLote[0]?.tipo_envio || "Aviso em Lote";
+    const total = todos.length;
+    const sucessos = todos.filter((m: any) => m.status === "enviado").length;
+    const falhas = todos.filter((m: any) => m.status === "falha_definitiva").length;
 
-    let textoRelatorio = `📋 *Relatório do Sistema Crisma*\n_Santuário Mãe Rainha_\n\n`;
-    textoRelatorio += `✅ *Lote de mensagens concluído!*\n`;
-    textoRelatorio += `📌 *Tipo:* ${tipo === "cobranca" ? "Cobrança de Mensalidade" : tipo === "recibo" ? "Recibos de Pagamento" : "Avisos em Lote"}\n\n`;
-    textoRelatorio += `📊 *Resumo Geral:*\n`;
-    textoRelatorio += `• Total Processado: ${total}\n`;
-    textoRelatorio += `• ✅ Entregues: ${sucessos}\n`;
-    textoRelatorio += `• ❌ Falhas Definitivas: ${falhas.length}\n`;
-
-    if (falhas.length > 0) {
-      textoRelatorio += `\n*Crismandos não contatados:*\n`;
-      falhas.slice(0, 10).forEach((f: any, idx: number) => {
-        textoRelatorio += `${idx + 1}. ${f.nome_destinatario || "Sem nome"} (${f.telefone}): ${f.erro_log || "Falha de entrega"}\n`;
-      });
-      if (falhas.length > 10) {
-        textoRelatorio += `_... e mais ${falhas.length - 10} contato(s). Veja o painel para detalhes._\n`;
-      }
-    }
-
-    textoRelatorio += `\n💡 _Você pode reenviar as mensagens que falharam diretamente no Dashboard da aba Servidor WhatsApp._`;
-
-    await notificarCoordenadorAlerta(supabase, textoRelatorio, evoUrl, evoApiKey, evoInstance);
+    console.log(`🎉 [Lote Concluído] Lote ${loteId}: ${sucessos}/${total} entregues, ${falhas} falhas.`);
   } catch (e) {
-    console.warn("⚠️ Falha ao verificar conclusão do lote:", e);
-  }
-}
-
-// Envia mensagem direta ao WhatsApp do coordenador cadastrado
-async function notificarCoordenadorAlerta(
-  supabase: any,
-  mensagem: string,
-  evoUrl: string,
-  evoApiKey: string,
-  evoInstance: string
-) {
-  try {
-    const { data: cfg } = await supabase
-      .from("configuracoes_sistema")
-      .select("valor")
-      .eq("chave", "config_turma_ciclo")
-      .maybeSingle();
-
-    const telCoordenador = cfg?.valor?.telefone_coordenador;
-    if (!telCoordenador) {
-      console.log("ℹ️ Nenhum telefone de coordenador configurado para notificações.");
-      return;
-    }
-
-    const telNorm = normalizarTelefone(telCoordenador);
-    if (!telNorm || telNorm.length < 12) return;
-
-    const cleanBaseUrl = evoUrl.replace(/\/+$/, "");
-    const targetUrl = `${cleanBaseUrl}/send/text`;
-
-    await fetch(targetUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: evoApiKey,
-      },
-      body: JSON.stringify({
-        instance: evoInstance,
-        number: telNorm,
-        text: mensagem,
-        options: { delay: 1000, presence: "composing", linkPreview: false },
-        textMessage: { text: mensagem },
-      }),
-    });
-
-    console.log(`📱 [Worker Fila] Notificação enviada ao coordenador (${telNorm}) com sucesso!`);
-  } catch (err) {
-    console.warn("⚠️ Não foi possível notificar o coordenador:", err);
+    console.warn("⚠️ Falha ao verificar lote:", e);
   }
 }

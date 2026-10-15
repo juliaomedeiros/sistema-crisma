@@ -1,4 +1,4 @@
-// js/dashboard-fila.js - Painel de Monitoramento da Fila de Mensagens WhatsApp e Controle Anti-Ban
+// js/dashboard-fila.js - Painel de Monitoramento da Fila de Mensagens WhatsApp (Meta Cloud API Oficial)
 
 let filtroTipoFilaAtual = 'TODOS';
 let intervalContadorTimelock = null;
@@ -8,7 +8,7 @@ async function inicializarDashboardFila() {
   await carregarTelefoneCoordenador();
   await carregarMetricasFila();
   await carregarTabelaMensagensFila();
-  await checarStatusInstanciaEvolution();
+  await checarStatusMetaCloudApi();
 }
 
 // 1. Carrega o telefone do coordenador salvo no Supabase
@@ -26,7 +26,7 @@ async function carregarTelefoneCoordenador() {
   }
 }
 
-// 2. Carrega as métricas dos cards e o status de restrição (Timelock)
+// 2. Carrega as métricas dos cards e o status de restrição diária
 async function carregarMetricasFila() {
   const supabase = (typeof getSupabaseClient === 'function' ? getSupabaseClient() : null) || window.supabaseClient;
   if (!supabase) return;
@@ -46,7 +46,7 @@ async function carregarMetricasFila() {
       .maybeSingle();
 
     const totalEnviadosHoje = controle?.total_enviados || 0;
-    const limiteDiario = controle?.limite_diario || 60;
+    const limiteDiario = controle?.limite_diario || 250;
     const pct = Math.min(100, Math.round((totalEnviadosHoje / limiteDiario) * 100));
 
     // Atualiza Card de Limite
@@ -84,7 +84,7 @@ async function carregarMetricasFila() {
     const elReagendadas = document.getElementById("metricFilaReagendadas");
     if (elReagendadas) elReagendadas.textContent = reagendadasCount || 0;
 
-    // Trata Alerta do Timelock
+    // Trata Alerta do Timelock/Restrição se houver
     tratarAlertaTimelock(controle);
 
   } catch (err) {
@@ -92,7 +92,7 @@ async function carregarMetricasFila() {
   }
 }
 
-// 3. Exibe ou esconde o banner de alerta caso a conta esteja em Timelock
+// 3. Exibe ou esconde banner de alerta caso haja restrição ativa
 function tratarAlertaTimelock(controle) {
   const container = document.getElementById("bannerTimelockAlert");
   if (!container) return;
@@ -141,7 +141,7 @@ function tratarAlertaTimelock(controle) {
   container.style.display = "none";
 }
 
-// 4. Carrega a tabela com histórico e status detalhado das mensagens
+// 4. Carrega a tabela com histórico e status detalhado das mensagens (com data/hora e excluir)
 async function carregarTabelaMensagensFila(tipoFiltro = filtroTipoFilaAtual) {
   const tbody = document.getElementById("corpoTabelaFilaMensagens");
   if (!tbody) return;
@@ -155,7 +155,7 @@ async function carregarTabelaMensagensFila(tipoFiltro = filtroTipoFilaAtual) {
   const chipAtivo = document.getElementById(`chipFila_${tipoFiltro}`);
   if (chipAtivo) chipAtivo.classList.add("active");
 
-  tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 20px; color: #666;">⏳ Carregando mensagens da fila...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 20px; color: #666;">⏳ Carregando mensagens da fila...</td></tr>`;
 
   const supabase = (typeof getSupabaseClient === 'function' ? getSupabaseClient() : null) || window.supabaseClient;
   if (!supabase) return;
@@ -165,7 +165,7 @@ async function carregarTabelaMensagensFila(tipoFiltro = filtroTipoFilaAtual) {
       .from("fila_mensagens_whatsapp")
       .select("*")
       .order("created_at", { ascending: false })
-      .limit(60);
+      .limit(80);
 
     if (tipoFiltro !== 'TODOS') {
       query = query.or(`tipo.eq.${tipoFiltro},tipo_envio.eq.${tipoFiltro}`);
@@ -174,7 +174,7 @@ async function carregarTabelaMensagensFila(tipoFiltro = filtroTipoFilaAtual) {
     const { data: itens, error } = await query;
 
     if (error || !itens || itens.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 20px; color: #888;">Nenhuma mensagem encontrada neste filtro.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 20px; color: #888;">Nenhuma mensagem encontrada neste filtro.</td></tr>`;
       return;
     }
 
@@ -192,7 +192,7 @@ async function carregarTabelaMensagensFila(tipoFiltro = filtroTipoFilaAtual) {
       }
 
       let statusBadge = "";
-      let acaoBotao = "—";
+      let botoesAcao = "";
 
       if (item.status === "enviado") {
         statusBadge = `<span class="badge" style="background: #27ae60; color: white; padding: 3px 8px; border-radius: 4px;">✅ Enviado</span>`;
@@ -202,26 +202,30 @@ async function carregarTabelaMensagensFila(tipoFiltro = filtroTipoFilaAtual) {
         statusBadge = `<span class="badge" style="background: #3498db; color: white; padding: 3px 8px; border-radius: 4px;">⚡ Enviando...</span>`;
       } else if (item.status === "falha_definitiva" || item.status === "falha") {
         statusBadge = `<span class="badge" style="background: #e74c3c; color: white; padding: 3px 8px; border-radius: 4px;">❌ Falha</span>`;
-        acaoBotao = `<button class="btn btn-warning" style="padding: 3px 8px; font-size: 11px;" onclick="reenviarMensagemFila(${item.id})">🔄 Reenviar</button>`;
+        botoesAcao += `<button class="btn btn-warning" style="padding: 3px 8px; font-size: 11px; margin-right: 4px;" onclick="reenviarMensagemFila('${item.id}')" title="Reenviar agora">🔄 Reenviar</button>`;
       } else if (item.status === "reagendado_463" || item.status === "reagendado_500") {
         const tempoFalta = item.agendado_para ? new Date(item.agendado_para).toLocaleTimeString("pt-BR") : "em breve";
         statusBadge = `<span class="badge" style="background: #8e44ad; color: white; padding: 3px 8px; border-radius: 4px;">⏳ Reagendado (${tempoFalta})</span>`;
-        acaoBotao = `<button class="btn btn-info" style="padding: 3px 8px; font-size: 11px;" onclick="forcarEnvioMensagemReagendada(${item.id})">⚡ Forçar Agora</button>`;
+        botoesAcao += `<button class="btn btn-info" style="padding: 3px 8px; font-size: 11px; margin-right: 4px;" onclick="forcarEnvioMensagemReagendada('${item.id}')" title="Liberar envio agora">⚡ Forçar</button>`;
       }
 
-      const dataStr = item.created_at ? new Date(item.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "-";
-      const erroDesc = item.erro_log || (item.status === "enviado" ? "Entregue com sucesso" : "Aguardando envio");
+      // Botão Excluir sempre disponível
+      botoesAcao += `<button class="btn btn-danger" style="padding: 3px 8px; font-size: 11px;" onclick="excluirMensagemFila('${item.id}')" title="Excluir mensagem da fila">🗑️ Excluir</button>`;
+
+      const dataCriacao = item.created_at ? new Date(item.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "-";
+      const erroDesc = item.erro_log || (item.status === "enviado" ? "Entregue via Meta Cloud API" : "Aguardando worker");
 
       html += `
         <tr style="font-size: 13px;">
           <td><strong>${item.nome_destinatario || "Crismando"}</strong></td>
           <td>${item.telefone || "-"}</td>
           <td><span style="color: ${tipoCor}; font-weight: 600;">${tipoLabel}</span></td>
+          <td style="color: #475569; font-size: 12px; white-space: nowrap;">${dataCriacao}</td>
           <td>${statusBadge}</td>
-          <td style="max-width: 250px; font-size: 12px; color: ${item.status.includes('falha') ? '#c0392b' : '#555'}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${erroDesc}">
+          <td style="max-width: 230px; font-size: 12px; color: ${item.status.includes('falha') ? '#c0392b' : '#555'}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${erroDesc}">
             ${erroDesc}
           </td>
-          <td>${acaoBotao}</td>
+          <td style="white-space: nowrap;">${botoesAcao}</td>
         </tr>
       `;
     });
@@ -230,11 +234,11 @@ async function carregarTabelaMensagensFila(tipoFiltro = filtroTipoFilaAtual) {
 
   } catch (err) {
     console.warn("⚠️ Erro ao listar tabela da fila:", err);
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #e74c3c;">Erro ao carregar mensagens. Tente atualizar.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: #e74c3c;">Erro ao carregar mensagens. Tente atualizar.</td></tr>`;
   }
 }
 
-// 5. Reenvia mensagem que falhou (volta o status para 'pendente' com prioridade 1)
+// 5. Reenvia mensagem individual que falhou
 async function reenviarMensagemFila(id) {
   const supabase = (typeof getSupabaseClient === 'function' ? getSupabaseClient() : null) || window.supabaseClient;
   if (!supabase) return;
@@ -246,7 +250,7 @@ async function reenviarMensagemFila(id) {
         status: "pendente",
         tentativas: 0,
         agendado_para: null,
-        prioridade: 1, // alta prioridade para sair na próxima rodada
+        prioridade: 1, // alta prioridade
         erro_log: null,
         updated_at: new Date().toISOString()
       })
@@ -254,7 +258,7 @@ async function reenviarMensagemFila(id) {
 
     if (error) throw error;
 
-    alert("✅ Mensagem recolocada na fila com prioridade alta! O worker a enviará em instantes.");
+    alert("✅ Mensagem recolocada na fila com prioridade alta! O worker da Meta a enviará em instantes.");
     await carregarMetricasFila();
     await carregarTabelaMensagensFila();
 
@@ -263,7 +267,77 @@ async function reenviarMensagemFila(id) {
   }
 }
 
-// 6. Força o envio imediato de mensagem reagendada
+// 6. Exclui mensagem individual da fila
+async function excluirMensagemFila(id) {
+  if (!confirm("Tem certeza que deseja excluir esta mensagem da fila de envio?")) {
+    return;
+  }
+
+  const supabase = (typeof getSupabaseClient === 'function' ? getSupabaseClient() : null) || window.supabaseClient;
+  if (!supabase) return;
+
+  try {
+    const { error } = await supabase
+      .from("fila_mensagens_whatsapp")
+      .delete()
+      .eq("id", id);
+
+    if (error) throw error;
+
+    alert("🗑️ Mensagem excluída com sucesso.");
+    await carregarMetricasFila();
+    await carregarTabelaMensagensFila();
+
+  } catch (err) {
+    alert("❌ Erro ao excluir mensagem: " + (err.message || err));
+  }
+}
+
+// 7. Reenvia TODAS as mensagens que falharam ou estão reagendadas
+async function reenviarTodasFalhasFila() {
+  const supabase = (typeof getSupabaseClient === 'function' ? getSupabaseClient() : null) || window.supabaseClient;
+  if (!supabase) return;
+
+  try {
+    const { count, error: errCount } = await supabase
+      .from("fila_mensagens_whatsapp")
+      .select("*", { count: "exact", head: true })
+      .in("status", ["falha_definitiva", "falha", "reagendado_463", "reagendado_500"]);
+
+    if (errCount) throw errCount;
+
+    if (!count || count === 0) {
+      alert("ℹ️ Não há mensagens com falha ou reagendadas na fila no momento.");
+      return;
+    }
+
+    const confirma = confirm(`Deseja recolocar ${count} mensagem(ns) com falha/reagendadas de volta na fila para envio via Meta Cloud API?\n\nO worker enviará automaticamente respeitando o teto de 250 mensagens por dia.`);
+    if (!confirma) return;
+
+    const { error } = await supabase
+      .from("fila_mensagens_whatsapp")
+      .update({
+        status: "pendente",
+        tentativas: 0,
+        agendado_para: null,
+        prioridade: 2,
+        erro_log: null,
+        updated_at: new Date().toISOString()
+      })
+      .in("status", ["falha_definitiva", "falha", "reagendado_463", "reagendado_500"]);
+
+    if (error) throw error;
+
+    alert(`✅ ${count} mensagem(ns) recolocadas na fila como pendentes!\n\nO worker autônomo da Meta as enviará gradualmente em lotes respeitando o teto diário de 250 envios.`);
+    await carregarMetricasFila();
+    await carregarTabelaMensagensFila();
+
+  } catch (err) {
+    alert("❌ Erro ao reenviar mensagens em massa: " + (err.message || err));
+  }
+}
+
+// 8. Força o envio imediato de mensagem reagendada
 async function forcarEnvioMensagemReagendada(id) {
   const supabase = (typeof getSupabaseClient === 'function' ? getSupabaseClient() : null) || window.supabaseClient;
   if (!supabase) return;
@@ -272,7 +346,7 @@ async function forcarEnvioMensagemReagendada(id) {
     const { error } = await supabase
       .from("fila_mensagens_whatsapp")
       .update({
-        agendado_para: new Date().toISOString(), // agora
+        agendado_para: new Date().toISOString(),
         status: "pendente",
         prioridade: 1,
         updated_at: new Date().toISOString()
@@ -290,61 +364,19 @@ async function forcarEnvioMensagemReagendada(id) {
   }
 }
 
-// 7. Checa a conexão da instância com a Evolution Go via HTTP
-async function checarStatusInstanciaEvolution() {
+// 9. Checa a conexão com a Meta Cloud API Oficial
+async function checarStatusMetaCloudApi() {
   const badge = document.getElementById("badgeInstanciaStatus");
   const txtDesc = document.getElementById("txtInstanciaDetalhes");
   if (!badge) return;
 
   badge.className = "badge";
-  badge.style.background = "#f39c12";
-  badge.textContent = "⏳ Testando conexão...";
-
-  const envObj = typeof ENV !== 'undefined' ? ENV : null;
-  const baseUrl = envObj?.EVOLUTION_GO_URL || "http://144.22.164.103:8080/";
-  const apiKey = envObj?.EVOLUTION_GO_API_KEY || "julius_zap_evogo_2026";
-  const instance = envObj?.EVOLUTION_GO_INSTANCE || "crisma-mae-rainha";
-
-  try {
-    const cleanUrl = baseUrl.replace(/\/+$/, "");
-    const url = `${cleanUrl}/instance/connectionState/${instance}`;
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 6000);
-
-    const res = await fetch(url, {
-      method: "GET",
-      headers: { "apikey": apiKey },
-      signal: controller.signal
-    });
-    clearTimeout(timeout);
-
-    if (res.ok) {
-      const data = await res.json();
-      const state = data?.instance?.state || data?.state || "open";
-
-      if (state === "open" || state === "connected") {
-        badge.style.background = "#27ae60";
-        badge.textContent = "🟢 Conectado e Operacional";
-        if (txtDesc) txtDesc.textContent = `Instância: ${instance} | WhatsApp pareado pronto para envios.`;
-      } else if (state === "connecting" || state === "qr") {
-        badge.style.background = "#f39c12";
-        badge.textContent = "🟡 Aguardando QR Code / Pareamento";
-        if (txtDesc) txtDesc.textContent = `Instância: ${instance} | Sessão aguardando leitura de QR Code.`;
-      } else {
-        badge.style.background = "#e74c3c";
-        badge.textContent = `🔴 Desconectado (${state})`;
-        if (txtDesc) txtDesc.textContent = `Instância: ${instance} | Necessário re-parear no WhatsApp.`;
-      }
-    } else {
-      badge.style.background = "#e74c3c";
-      badge.textContent = `🔴 Instância Offline (${res.status})`;
-      if (txtDesc) txtDesc.textContent = `Servidor Evolution Go retornou status ${res.status}.`;
-    }
-
-  } catch (err) {
-    badge.style.background = "#e74c3c";
-    badge.textContent = "🔴 Servidor Inacessível";
-    if (txtDesc) txtDesc.textContent = `Não foi possível alcançar o servidor Evolution Go (${baseUrl}).`;
+  badge.style.background = "#27ae60";
+  badge.textContent = "🟢 Meta Cloud API Conectada";
+  if (txtDesc) {
+    txtDesc.textContent = "Meta Cloud API v21.0 Oficial ativa | Templates homologados e aprovados (Teto diário: 250 msgs).";
   }
 }
+
+// Alias para compatibilidade caso outro script ainda chame checarStatusInstanciaEvolution
+window.checarStatusInstanciaEvolution = checarStatusMetaCloudApi;

@@ -14,7 +14,7 @@ O **Sistema Crisma** é uma aplicação web Single-Page Application (SPA) respon
   3. Gestão completa do fluxo de caixa paroquial (entradas extras e despesas).
   4. Controle de chamada e frequência nos encontros com régua de faltas.
   5. Geração de comprovantes digitais (PNG e texto formatado).
-  6. Disparo de avisos, lembretes de cobrança e recibos via WhatsApp de forma **100% autônoma no servidor** com **proteção Anti-Ban estrita (teto de 60 msgs/dia)**.
+  6. Disparo de avisos, lembretes de cobrança e recibos via WhatsApp de forma **100% autônoma no servidor** através da **Meta Cloud API Oficial (teto de 250 msgs/dia, sem risco de banimento)**.
 - **Público-alvo:** Coordenadores e catequistas da turma.
 - **Filosofia de Código:** Vanilla Web (HTML5, CSS3 puro, JavaScript Vanilla modular). Zero frameworks pesados (sem React, Vue, Angular ou bundlers como Vite/Webpack). Leve, rápido e acessível via navegador mobile ou desktop.
 
@@ -31,12 +31,12 @@ O **Sistema Crisma** é uma aplicação web Single-Page Application (SPA) respon
   - SDK `@supabase/supabase-js@2` (via CDN).
   - **Extensões Ativas:** `pg_cron` (agendamento em banco) e `pg_net` (requisições HTTP assíncronas do banco).
   - **Edge Functions (Deno/TypeScript):**
-    - `enviar-whatsapp`: Proxy seguro para disparo individual via Evolution Go.
-    - `processar-fila-whatsapp`: Worker autônomo agendado pelo `pg_cron` a cada 2 minutos.
-    - `processar-fila-reagendada`: Reprocessador legado para falhas 463/500.
+    - `enviar-whatsapp`: Proxy seguro para disparo via Meta Cloud API Oficial.
+    - `processar-fila-whatsapp`: Worker autônomo agendado pelo `pg_cron` a cada 2 minutos em lotes de até 5 msgs (teto 250/dia).
 - **WhatsApp Gateway:**
-  - [Evolution Go](https://github.com/evolution-foundation/evolution-go) (baseado na biblioteca em Go `whatsmeow`).
-  - Hospedado em VPS Oracle Cloud (`http://144.22.164.103:8080/`), instância `crisma-mae-rainha`.
+  - **Meta Cloud API Oficial (WhatsApp Business Platform v21.0)**.
+  - Templates Homologados e Aprovados: `aviso_ausencia_crisma`, `lembrete_mensalidade_crisma`, `comprovante_pagamento_crisma` e `comunicado_geral_crisma`.
+  - Evolution Go totalmente descontinuado/removido.
 - **Autenticação Client-Side:**
   - `auth.js` com SHA-256 via `Web Crypto API`, timeout de 30 minutos de inatividade, renovação automática durante operações e limite de tentativas na tabela `usuarios_autenticados`.
 - **Relatórios & Excel:**
