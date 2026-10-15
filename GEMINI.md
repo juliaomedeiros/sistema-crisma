@@ -128,7 +128,16 @@ c:\ProjectsCode\sistema-crisma\
 - **Configurações da Turma:** Mês de início do ciclo (padrão: Setembro), ano de início, valor mensal padrão e nome da edição.
 - **Configuração do Coordenador:** Campo para cadastrar o WhatsApp do coordenador que receberá relatórios e alertas automáticos.
 - **Central de Monitoramento da Fila de Mensagens:**
-  - **5 Cards de Métricas:** *Na Fila*, *Enviadas Hoje*, *Falhas Definitivas*, *Reagendadas*, *Teto Seguro Diário (ex: 47 / 250 com barra de progresso visual)*.
+  - **6 Cards de Métricas em Tempo Real:**
+    1. *Na Fila (Pendentes)*: Mensagens aguardando processamento pelo worker.
+    2. *Enviadas Hoje*: Quantidade do dia com **Custo Hoje em R$** calculado automaticamente e divisão `Utilidade • Marketing`.
+    3. *Fatura Estimada no Mês*: Somatório financeiro das mensagens entregues no mês corrente em R$ com total de envios e divisão `Utilidade • Marketing` (Permite saber exatamente o valor da fatura da Meta).
+    4. *Falhas Definitivas*: Mensagens que esgotaram tentativas.
+    5. *Reagendadas / Aguardando*: Mensagens aguardando janela de tempo.
+    6. *Teto Seguro Diário*: Barra de progresso visual e cota diária oficial (ex: `109 / 250`).
+  - **Tabela de Tarifas Oficiais Meta Brasil (BRL):**
+    - **Utility (Utilidade):** R$ 0,0350 / msg (`comprovante_pagamento_crisma`, `lembrete_mensalidade_crisma`, `aviso_ausencia_crisma`, `resumo_faltas_crisma`).
+    - **Marketing:** R$ 0,3217 / msg (`comunicado_geral_crisma`).
   - **Status da Conexão:** 🟢 Meta Cloud API Oficial Conectada.
   - **Tabela Histórica com Filtros:** Filtros por chips (`Todos`, `📢 Avisos em Lote`, `💰 Cobranças`, `🧾 Recibos`, `📅 Faltas`).
   - **Ações na Fila:** Exibição da data/hora exata da geração da mensagem, botão individual **`[🗑️ Excluir]`**, botão individual **`[🔄 Reenviar]`** com alta prioridade e botão mestre **`[🔄 Reenviar Todas as Falhas]`** respeitando o limite diário de 250 mensagens.

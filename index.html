@@ -537,32 +537,57 @@
                     </div>
 
                     <!-- Cards de Métricas e Limite Anti-Ban -->
-                    <div class="stats" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin-bottom: 20px;">
-                        <div class="stat-card" style="background: linear-gradient(45deg, #f39c12, #e67e22);">
-                            <div class="stat-number" id="metricFilaPendentes">0</div>
-                            <div>📋 Na Fila (Pendentes)</div>
+                    <div class="stats" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 20px;">
+                        <div class="stat-card" style="background: linear-gradient(45deg, #f39c12, #e67e22); display: flex; flex-direction: column; justify-content: space-between;">
+                            <div>
+                                <div class="stat-number" id="metricFilaPendentes">0</div>
+                                <div>📋 Na Fila (Pendentes)</div>
+                            </div>
                         </div>
 
-                        <div class="stat-card" style="background: linear-gradient(45deg, #27ae60, #2ecc71);">
-                            <div class="stat-number" id="metricFilaEnviadosHoje">0</div>
-                            <div>✅ Enviadas Hoje</div>
+                        <div class="stat-card" style="background: linear-gradient(45deg, #27ae60, #2ecc71); display: flex; flex-direction: column; justify-content: space-between;">
+                            <div>
+                                <div class="stat-number" id="metricFilaEnviadosHoje">0</div>
+                                <div>✅ Enviadas Hoje</div>
+                            </div>
+                            <div style="margin-top: 10px; background: rgba(0, 0, 0, 0.18); padding: 6px 10px; border-radius: 6px; font-size: 12px;">
+                                <div style="font-weight: bold; font-size: 13px;">💰 Custo Hoje: <span id="metricFilaCustoHoje">R$ 0,00</span></div>
+                                <div id="metricFilaDetalheHoje" style="font-size: 11px; opacity: 0.9; margin-top: 2px;">0 Utilidade • 0 Marketing</div>
+                            </div>
                         </div>
 
-                        <div class="stat-card" style="background: linear-gradient(45deg, #c0392b, #e74c3c);">
-                            <div class="stat-number" id="metricFilaFalhas">0</div>
-                            <div>❌ Falhas Definitivas</div>
+                        <div class="stat-card" style="background: linear-gradient(45deg, #0d9488, #14b8a6); display: flex; flex-direction: column; justify-content: space-between;">
+                            <div>
+                                <div class="stat-number" id="metricFilaCustoMes" style="font-size: 1.8em;">R$ 0,00</div>
+                                <div>💳 Fatura Estimada no Mês</div>
+                            </div>
+                            <div style="margin-top: 10px; background: rgba(0, 0, 0, 0.18); padding: 6px 10px; border-radius: 6px; font-size: 12px;">
+                                <div style="font-weight: bold; font-size: 12px;"><span id="metricFilaTotalMes">0</span> msgs em <span id="metricFilaNomeMesCorrente">Mês</span></div>
+                                <div id="metricFilaDetalheMes" style="font-size: 11px; opacity: 0.9; margin-top: 2px;">0 Utilidade • 0 Marketing</div>
+                            </div>
                         </div>
 
-                        <div class="stat-card" style="background: linear-gradient(45deg, #8e44ad, #9b59b6);">
-                            <div class="stat-number" id="metricFilaReagendadas">0</div>
-                            <div>⏳ Reagendadas / Aguardando</div>
+                        <div class="stat-card" style="background: linear-gradient(45deg, #c0392b, #e74c3c); display: flex; flex-direction: column; justify-content: space-between;">
+                            <div>
+                                <div class="stat-number" id="metricFilaFalhas">0</div>
+                                <div>❌ Falhas Definitivas</div>
+                            </div>
                         </div>
 
-                        <div class="stat-card" style="background: linear-gradient(45deg, #2c3e50, #34495e);">
-                            <div class="stat-number" id="metricFilaLimiteHoje" style="font-size: 1.8em;">0 / 250</div>
-                            <div>🛡️ Teto Seguro Diário (Meta API)</div>
-                            <div style="background: rgba(255,255,255,0.3); height: 6px; border-radius: 3px; margin-top: 8px; overflow: hidden;">
-                                <div id="barraFilaLimiteHoje" style="background: #2ecc71; height: 100%; width: 0%; transition: width 0.3s;"></div>
+                        <div class="stat-card" style="background: linear-gradient(45deg, #8e44ad, #9b59b6); display: flex; flex-direction: column; justify-content: space-between;">
+                            <div>
+                                <div class="stat-number" id="metricFilaReagendadas">0</div>
+                                <div>⏳ Reagendadas / Aguardando</div>
+                            </div>
+                        </div>
+
+                        <div class="stat-card" style="background: linear-gradient(45deg, #2c3e50, #34495e); display: flex; flex-direction: column; justify-content: space-between;">
+                            <div>
+                                <div class="stat-number" id="metricFilaLimiteHoje" style="font-size: 1.8em;">0 / 250</div>
+                                <div>🛡️ Teto Seguro Diário (Meta API)</div>
+                                <div style="background: rgba(255,255,255,0.3); height: 6px; border-radius: 3px; margin-top: 8px; overflow: hidden;">
+                                    <div id="barraFilaLimiteHoje" style="background: #2ecc71; height: 100%; width: 0%; transition: width 0.3s;"></div>
+                                </div>
                             </div>
                         </div>
                     </div>
