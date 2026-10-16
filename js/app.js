@@ -43,6 +43,9 @@ document.addEventListener('DOMContentLoaded', async function() {
       if (typeof inicializarMóduloExcel === 'function') {
         inicializarMóduloExcel();
       }
+      if (typeof inicializarModuloChatWhatsApp === 'function') {
+        inicializarModuloChatWhatsApp();
+      }
       if (typeof aplicarMascaraTelefoneDOM === 'function') {
         aplicarMascaraTelefoneDOM(document.getElementById("novoTelefone"));
         aplicarMascaraTelefoneDOM(document.getElementById("editTelefone"));
@@ -134,6 +137,7 @@ function alternarAba(tabId) {
     tabFrequencia: "btnTabFrequencia",
     tabFinanceiro: "btnTabFinanceiro",
     tabEvolution: "btnTabEvolution",
+    tabChat: "btnTabChat",
     tabAvisosLote: "btnTabAvisosLote"
   };
 
@@ -161,6 +165,10 @@ function alternarAba(tabId) {
   } else if (tabId === "tabEvolution") {
     if (typeof inicializarDashboardFila === "function") {
       inicializarDashboardFila();
+    }
+  } else if (tabId === "tabChat") {
+    if (typeof abrirAbaChatWhatsApp === "function") {
+      abrirAbaChatWhatsApp();
     }
   }
 }

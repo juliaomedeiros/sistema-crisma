@@ -319,7 +319,38 @@ function extrairHorarioRegistro(p) {
 
 // ─────────────────────────────────────────────
 // ESTORNO / EXCLUSÃO DE PAGAMENTO (MENSAL E DIÁRIO)
+// Limpa também o recibo correspondente da fila para permitir novo envio se relançado
 // ─────────────────────────────────────────────
+async function limparRecibosEstornadosDaFila(supabase, crismandoId, listaReferenciasMesAno) {
+  if (!supabase || !crismandoId || !listaReferenciasMesAno || listaReferenciasMesAno.length === 0) return;
+  try {
+    const { data: recibosCrismando } = await supabase
+      .from("fila_mensagens_whatsapp")
+      .select("id, mensagem, dados_template")
+      .eq("crismando_id", crismandoId)
+      .eq("tipo", "recibo");
+
+    if (!recibosCrismando || recibosCrismando.length === 0) return;
+
+    const idsParaRemover = recibosCrismando
+      .filter((r) => {
+        const msg = String(r.mensagem || "");
+        const paramsStr = JSON.stringify(r.dados_template || {});
+        return listaReferenciasMesAno.some((ref) => ref && (msg.includes(ref) || paramsStr.includes(ref)));
+      })
+      .map((r) => r.id);
+
+    if (idsParaRemover.length > 0) {
+      await supabase
+        .from("fila_mensagens_whatsapp")
+        .delete()
+        .in("id", idsParaRemover);
+    }
+  } catch (e) {
+    console.warn("⚠️ Aviso ao limpar recibo estornado da fila:", e);
+  }
+}
+
 async function estornarPagamento(pagamentoId, nomeCrismando, referenciaTexto, valor, origem = "mensal", dataDiaRef = "") {
   const valorFormatado = parseFloat(valor || 0).toFixed(2).replace(".", ",");
   const confirmar = confirm(
@@ -335,12 +366,21 @@ async function estornarPagamento(pagamentoId, nomeCrismando, referenciaTexto, va
     const supabase = getSupabaseClient() || window.supabase;
     if (!supabase) throw new Error("Cliente Supabase não inicializado");
 
+    const pgAlvo = (pagamentos || []).find((p) => String(p.id) === String(pagamentoId));
+    const crismandoIdAlvo = pgAlvo ? pgAlvo.crismando_id : null;
+    const refMesAno = pgAlvo ? `${extrairMesAno(pgAlvo).mes}/${extrairMesAno(pgAlvo).ano}` : referenciaTexto;
+
     const { error } = await supabase
       .from("pagamentos")
       .delete()
       .eq("id", pagamentoId);
 
     if (error) throw error;
+
+    // Limpar o recibo correspondente da fila_mensagens_whatsapp para liberar novo envio futuro
+    if (crismandoIdAlvo) {
+      await limparRecibosEstornadosDaFila(supabase, crismandoIdAlvo, [refMesAno, referenciaTexto]);
+    }
 
     pagamentos = (pagamentos || []).filter((p) => String(p.id) !== String(pagamentoId));
 
@@ -349,6 +389,8 @@ async function estornarPagamento(pagamentoId, nomeCrismando, referenciaTexto, va
     if (typeof atualizarEstatisticasFinanceiras === "function") atualizarEstatisticasFinanceiras();
     if (typeof atualizarGradeMeses === "function") atualizarGradeMeses();
     if (typeof popularSelectRelatorio === "function") popularSelectRelatorio();
+    if (typeof carregarMetricasFila === "function") carregarMetricasFila();
+    if (typeof carregarTabelaMensagensFila === "function") carregarTabelaMensagensFila();
 
     const campoPesquisa = document.getElementById("nomePesquisa");
     if (campoPesquisa && campoPesquisa.value.trim().length >= 2) {
@@ -392,6 +434,11 @@ async function estornarPagamentosDiaCrismando(idsCsv, nomeCrismando, mesesTexto,
     const supabase = getSupabaseClient() || window.supabase;
     if (!supabase) throw new Error("Cliente Supabase não inicializado");
 
+    const setIds = new Set(ids.map(String));
+    const pgsAlvo = (pagamentos || []).filter((p) => setIds.has(String(p.id)));
+    const crismandoIdAlvo = pgsAlvo.length > 0 ? pgsAlvo[0].crismando_id : null;
+    const refsMeses = pgsAlvo.map((p) => `${extrairMesAno(p).mes}/${extrairMesAno(p).ano}`);
+
     const { error } = await supabase
       .from("pagamentos")
       .delete()
@@ -399,7 +446,11 @@ async function estornarPagamentosDiaCrismando(idsCsv, nomeCrismando, mesesTexto,
 
     if (error) throw error;
 
-    const setIds = new Set(ids.map(String));
+    // Limpar os recibos correspondentes da fila_mensagens_whatsapp para liberar novo envio futuro
+    if (crismandoIdAlvo) {
+      await limparRecibosEstornadosDaFila(supabase, crismandoIdAlvo, [...refsMeses, mesesTexto]);
+    }
+
     pagamentos = (pagamentos || []).filter((p) => !setIds.has(String(p.id)));
 
     atualizarTabela();
@@ -407,6 +458,8 @@ async function estornarPagamentosDiaCrismando(idsCsv, nomeCrismando, mesesTexto,
     if (typeof atualizarEstatisticasFinanceiras === "function") atualizarEstatisticasFinanceiras();
     if (typeof atualizarGradeMeses === "function") atualizarGradeMeses();
     if (typeof popularSelectRelatorio === "function") popularSelectRelatorio();
+    if (typeof carregarMetricasFila === "function") carregarMetricasFila();
+    if (typeof carregarTabelaMensagensFila === "function") carregarTabelaMensagensFila();
 
     const campoPesquisa = document.getElementById("nomePesquisa");
     if (campoPesquisa && campoPesquisa.value.trim().length >= 2) {
