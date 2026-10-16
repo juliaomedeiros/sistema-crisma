@@ -40,6 +40,10 @@
                 <button class="tab-btn" id="btnTabEvolution" onclick="alternarAba('tabEvolution')">
                     <span>⚙️</span> Servidor WhatsApp
                 </button>
+                <button class="tab-btn" id="btnTabChat" onclick="alternarAba('tabChat')" style="position: relative;">
+                    <span>💬</span> Chat
+                    <span id="badgeChatNaoLidas" style="display: none; background: #e74c3c; color: white; border-radius: 12px; padding: 1px 7px; font-size: 11px; font-weight: bold; margin-left: 4px;">0</span>
+                </button>
                 <button class="tab-btn" id="btnTabAvisosLote" onclick="alternarAba('tabAvisosLote')">
                     <span>📢</span> Avisos em Lote
                 </button>
@@ -762,6 +766,55 @@ Sua presença é fundamental na nossa caminhada de fé!</textarea>
                 </div>
             </div>
 
+            <!-- =========================================================
+                 ABA: CHAT WHATSAPP (RESPOSTAS DENTRO DA JANELA DE 24H)
+                 ========================================================= -->
+            <div id="tabChat" class="tab-pane">
+                <div class="section">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
+                        <h3 style="margin: 0;">💬 Chat de Atendimento (WhatsApp Meta Cloud API)</h3>
+                        <button class="btn btn-info" style="padding: 7px 14px; font-size: 13px; margin: 0;" onclick="carregarConversasChat(true)">
+                            🔄 Atualizar Conversas
+                        </button>
+                    </div>
+
+                    <!-- Banner Fixo de Regras Claras para o Coordenador -->
+                    <div style="background: #eef6ff; border: 1px solid #b6d4fe; border-left: 5px solid #2980b9; border-radius: 8px; padding: 12px 15px; margin-bottom: 16px; font-size: 13px; color: #1e3a5f; line-height: 1.45;">
+                        <strong>📌 Regras de Funcionamento do Chat (Importante para a Coordenação):</strong>
+                        <ul style="margin: 6px 0 0 18px; padding: 0;">
+                            <li><strong>💰 Custo Zero (Janela de 24h):</strong> Você só pode responder por aqui dentro de <strong>24 horas</strong> após a última mensagem enviada pelo crismando (gratuito na Meta). Passadas 24h, o chat bloqueia automaticamente para <strong>nunca gerar cobrança extra</strong>. Se o sistema enviar um novo aviso automático no futuro e o crismando responder, a janela de 24h reabre sozinha.</li>
+                            <li><strong>📝 Somente Texto:</strong> Por economia de servidor e banco de dados, <strong>áudios, fotos e vídeos nunca são armazenados</strong> — o sistema registra apenas mensagens de texto.</li>
+                            <li><strong>🧹 Exclusão Automática (45 Dias):</strong> O worker do servidor exclui automaticamente todas as mensagens do chat com mais de <strong>45 dias</strong> para manter o banco gratuito sempre leve.</li>
+                        </ul>
+                    </div>
+
+                    <!-- Container Responsivo do Chat (Lista à esquerda / Conversa à direita; empilhado no celular) -->
+                    <div id="chatWrapperResponsivo" class="chat-wrapper-responsivo">
+                        <!-- Coluna 1: Lista de Conversas -->
+                        <div class="chat-col-contatos">
+                            <div style="padding: 10px; background: #f8fafc; border-bottom: 1px solid #dee2e6;">
+                                <input type="text" id="inputBuscaContatoChat"
+                                       placeholder="🔍 Buscar crismando ou mensagem..."
+                                       oninput="renderizarListaContatosChat()"
+                                       style="padding: 8px 12px; font-size: 13px; border-radius: 6px; border: 1px solid #cbd5e1; margin: 0;">
+                            </div>
+                            <div id="listaContatosChat" style="flex: 1; overflow-y: auto;">
+                                <div style="padding: 20px; text-align: center; color: #7f8c8d; font-size: 13px;">
+                                    Carregando conversas...
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Coluna 2: Conversa Ativa -->
+                        <div id="painelConversaChatAtiva" class="chat-col-conversa">
+                            <div style="height: 100%; display: flex; align-items: center; justify-content: center; color: #7f8c8d; padding: 20px; text-align: center; font-size: 14px;">
+                                👈 Toque em um crismando na lista para ver o último aviso enviado e responder.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Modal para Comprovante -->
             <div id="modalComprovante" class="modal">
                 <div class="modal-content">
@@ -814,6 +867,7 @@ Sua presença é fundamental na nossa caminhada de fé!</textarea>
             <script src="js/frequencia.js"></script>
             <script src="js/evolution-service.js"></script>
             <script src="js/dashboard-fila.js"></script>
+            <script src="js/chat-whatsapp.js"></script>
             <script src="js/excel-import.js"></script>
             <script src="js/app.js"></script>
         </div>

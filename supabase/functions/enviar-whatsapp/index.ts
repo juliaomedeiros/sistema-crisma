@@ -45,7 +45,7 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const { telefone, mensagem, templateName, templateParams, dados_template } = body ?? {};
+    const { telefone, mensagem, templateName, templateParams, dados_template, modoTextoLivre } = body ?? {};
 
     if (!telefone) {
       return jsonResponse({ ok: false, requestId, error: "Telefone é obrigatório." }, 400);
@@ -73,11 +73,11 @@ serve(async (req) => {
     }
 
     let metaPayload: any = null;
-    let finalTplName = templateName || dados_template?.template;
+    let finalTplName = modoTextoLivre ? null : (templateName || dados_template?.template);
     let finalTplParams = templateParams || dados_template?.params || [];
 
-    // Auto-detecção de template oficial se apenas mensagem for fornecida
-    if (!finalTplName && mensagem) {
+    // Auto-detecção de template oficial se apenas mensagem for fornecida (exceto quando modoTextoLivre = true no Chat 24h)
+    if (!modoTextoLivre && !finalTplName && mensagem) {
       const nomeDest = (mensagem.match(/Olá,\s*([^.]+)\./i)?.[1] || "Crismando").trim();
       if (mensagem.includes("Confirmamos o recebimento da sua")) {
         finalTplName = "comprovante_pagamento_crisma";

@@ -668,4 +668,80 @@ tr:hover {
     border-color: #f59e0b;
 }
 
+/* ====================================================================
+   ABA CHAT WHATSAPP (RESPONSIVO CELULAR, TABLET E DESKTOP)
+   ==================================================================== */
+.chat-wrapper-responsivo {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    height: 580px;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #ffffff;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.chat-col-contatos {
+    border-right: 1px solid #dee2e6;
+    display: flex;
+    flex-direction: column;
+    background: #ffffff;
+    height: 100%;
+    overflow: hidden;
+}
+
+.chat-col-conversa {
+    display: flex;
+    flex-direction: column;
+    background: #efeae2;
+    height: 100%;
+    overflow: hidden;
+}
+
+.chat-contact-item {
+    padding: 12px 14px;
+    border-bottom: 1px solid #f1f5f9;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.chat-contact-item:hover {
+    background: #f8fafc;
+}
+
+.chat-contact-item.active {
+    background: #e8f5e9;
+    border-left: 4px solid #25d366;
+}
+
+.btn-voltar-chat-mobile {
+    display: none;
+}
+
+@media (max-width: 768px) {
+    .chat-wrapper-responsivo {
+        grid-template-columns: 1fr;
+        height: 72vh;
+        min-height: 460px;
+    }
+
+    .chat-wrapper-responsivo .chat-col-conversa {
+        display: none;
+    }
+
+    .chat-wrapper-responsivo.mobile-chat-open .chat-col-contatos {
+        display: none;
+    }
+
+    .chat-wrapper-responsivo.mobile-chat-open .chat-col-conversa {
+        display: flex;
+    }
+
+    .btn-voltar-chat-mobile {
+        display: inline-block;
+    }
+}
+
+
 

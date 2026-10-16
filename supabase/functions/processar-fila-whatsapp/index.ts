@@ -97,6 +97,17 @@ serve(async (req) => {
       .eq("status", "processando")
       .lte("updated_at", dezMinutosAtras);
 
+    // 2.1 EXPURGO AUTOMÁTICO DE MENSAGENS DO CHAT COM MAIS DE 45 DIAS
+    try {
+      const limite45Dias = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString();
+      await supabase
+        .from("mensagens_chat_whatsapp")
+        .delete()
+        .lt("created_at", limite45Dias);
+    } catch (_) {
+      // Ignora silenciosamente caso a tabela ainda não tenha sido criada
+    }
+
     // 3. CONTROLE DE VOLUME DIÁRIO (Teto de 250 msgs/dia na Meta)
     const LIMITE_PADRAO = 250;
 
