@@ -34,6 +34,10 @@ env.js
 
 # vercel
 .vercel
+
+# supabase backend (mantido apenas localmente e na nuvem Supabase)
+supabase/
+.supabase/
 # Logs
 logs
 *.log
