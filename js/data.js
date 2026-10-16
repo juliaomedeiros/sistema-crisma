@@ -441,7 +441,8 @@ async function registrarPagamento() {
       }
     }
 
-    const dataHoje = new Date().toISOString().split("T")[0];
+    const agoraLocal = new Date();
+    const dataHoje = `${agoraLocal.getFullYear()}-${String(agoraLocal.getMonth() + 1).padStart(2, "0")}-${String(agoraLocal.getDate()).padStart(2, "0")}`;
     const listaMesesAnos = [];
     const dadosPagamentosParaInserir = [];
 
@@ -485,6 +486,8 @@ async function registrarPagamento() {
 
     atualizarTabela();
     atualizarEstatisticas();
+    if (typeof atualizarEstatisticasFinanceiras === "function") atualizarEstatisticasFinanceiras();
+    if (typeof popularSelectRelatorio === "function") popularSelectRelatorio();
 
     const valorTotalGeral = valorUnitario * checkboxesMarcados.length;
     const resultadoComprovante = gerarTextoComprovanteConsolidado(

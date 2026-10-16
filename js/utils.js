@@ -285,6 +285,143 @@ function popularSelectRelatorio() {
 }
 
 // ─────────────────────────────────────────────
+// UTILITÁRIOS DE DATA PARA RELATÓRIO DIÁRIO
+// ─────────────────────────────────────────────
+function extrairDataPagamentoISO(p) {
+  if (!p) return "Sem data";
+  if (p.data_pagamento && /^\d{4}-\d{2}-\d{2}/.test(String(p.data_pagamento).trim())) {
+    return String(p.data_pagamento).trim().substring(0, 10);
+  }
+  if (p.created_at) {
+    const dt = new Date(p.created_at);
+    if (!isNaN(dt.getTime())) {
+      return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+    }
+  }
+  return p.data_pagamento ? String(p.data_pagamento).trim() : "Sem data";
+}
+
+function formatarDataBR(dataIso) {
+  if (!dataIso || dataIso === "-" || dataIso === "Sem data") return dataIso || "-";
+  const partes = String(dataIso).substring(0, 10).split("-");
+  if (partes.length === 3 && partes[0].length === 4) {
+    return `${partes[2]}/${partes[1]}/${partes[0]}`;
+  }
+  return dataIso;
+}
+
+function extrairHorarioRegistro(p) {
+  if (!p || !p.created_at) return "-";
+  const dt = new Date(p.created_at);
+  if (isNaN(dt.getTime())) return "-";
+  return dt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+}
+
+// ─────────────────────────────────────────────
+// ESTORNO / EXCLUSÃO DE PAGAMENTO (MENSAL E DIÁRIO)
+// ─────────────────────────────────────────────
+async function estornarPagamento(pagamentoId, nomeCrismando, referenciaTexto, valor, origem = "mensal", dataDiaRef = "") {
+  const valorFormatado = parseFloat(valor || 0).toFixed(2).replace(".", ",");
+  const confirmar = confirm(
+    `⚠️ CONFIRMAR ESTORNO DE PAGAMENTO\n\n` +
+    `👤 Crismando: ${nomeCrismando}\n` +
+    `📅 Referência: ${referenciaTexto}\n` +
+    `💰 Valor: R$ ${valorFormatado}\n\n` +
+    `Deseja realmente estornar/excluir este lançamento do sistema?`
+  );
+  if (!confirmar) return;
+
+  try {
+    const supabase = getSupabaseClient() || window.supabase;
+    if (!supabase) throw new Error("Cliente Supabase não inicializado");
+
+    const { error } = await supabase
+      .from("pagamentos")
+      .delete()
+      .eq("id", pagamentoId);
+
+    if (error) throw error;
+
+    pagamentos = (pagamentos || []).filter((p) => String(p.id) !== String(pagamentoId));
+
+    atualizarTabela();
+    atualizarEstatisticas();
+    if (typeof atualizarEstatisticasFinanceiras === "function") atualizarEstatisticasFinanceiras();
+    if (typeof atualizarGradeMeses === "function") atualizarGradeMeses();
+    if (typeof popularSelectRelatorio === "function") popularSelectRelatorio();
+
+    const campoPesquisa = document.getElementById("nomePesquisa");
+    if (campoPesquisa && campoPesquisa.value.trim().length >= 2) {
+      exibirResultadoPesquisa();
+    }
+
+    if (origem === "diario") {
+      verRelatorioDiario(dataDiaRef);
+    } else {
+      gerarRelatorio();
+    }
+
+    alert(`✅ Pagamento de ${nomeCrismando} (${referenciaTexto} - R$ ${valorFormatado}) estornado com sucesso!`);
+  } catch (err) {
+    console.error("Erro ao estornar pagamento:", err);
+    alert(`❌ Erro ao estornar pagamento: ${err.message || err}`);
+  }
+}
+
+async function estornarPagamentosDiaCrismando(idsCsv, nomeCrismando, mesesTexto, valorTotal, dataDiaRef) {
+  const ids = String(idsCsv).split(",").map((id) => id.trim()).filter(Boolean);
+  if (ids.length === 0) return;
+
+  if (ids.length === 1) {
+    return estornarPagamento(ids[0], nomeCrismando, mesesTexto, valorTotal, "diario", dataDiaRef);
+  }
+
+  const valorFormatado = parseFloat(valorTotal || 0).toFixed(2).replace(".", ",");
+  const confirmar = confirm(
+    `⚠️ CONFIRMAR ESTORNO DE ATENDIMENTO NO DIA\n\n` +
+    `👤 Crismando: ${nomeCrismando}\n` +
+    `📅 Data do Recebimento: ${formatarDataBR(dataDiaRef)}\n` +
+    `📆 Meses (${ids.length}): ${mesesTexto}\n` +
+    `💰 Valor Total no Dia: R$ ${valorFormatado}\n\n` +
+    `Deseja estornar todos os ${ids.length} meses lançados neste dia para ${nomeCrismando}?\n` +
+    `(Dica: se quiser estornar apenas 1 mês específico, clique no "✖" ao lado do próprio mês na coluna de meses)`
+  );
+  if (!confirmar) return;
+
+  try {
+    const supabase = getSupabaseClient() || window.supabase;
+    if (!supabase) throw new Error("Cliente Supabase não inicializado");
+
+    const { error } = await supabase
+      .from("pagamentos")
+      .delete()
+      .in("id", ids);
+
+    if (error) throw error;
+
+    const setIds = new Set(ids.map(String));
+    pagamentos = (pagamentos || []).filter((p) => !setIds.has(String(p.id)));
+
+    atualizarTabela();
+    atualizarEstatisticas();
+    if (typeof atualizarEstatisticasFinanceiras === "function") atualizarEstatisticasFinanceiras();
+    if (typeof atualizarGradeMeses === "function") atualizarGradeMeses();
+    if (typeof popularSelectRelatorio === "function") popularSelectRelatorio();
+
+    const campoPesquisa = document.getElementById("nomePesquisa");
+    if (campoPesquisa && campoPesquisa.value.trim().length >= 2) {
+      exibirResultadoPesquisa();
+    }
+
+    verRelatorioDiario(dataDiaRef);
+    alert(`✅ Pagamentos do dia ${formatarDataBR(dataDiaRef)} de ${nomeCrismando} (R$ ${valorFormatado}) estornados com sucesso!`);
+  } catch (err) {
+    console.error("Erro ao estornar pagamentos do dia:", err);
+    alert(`❌ Erro ao estornar pagamentos: ${err.message || err}`);
+  }
+}
+
+// ─────────────────────────────────────────────
 // ✅ RELATÓRIO — VER RELATÓRIO MENSAL
 // ─────────────────────────────────────────────
 function gerarRelatorio() {
@@ -318,18 +455,27 @@ function gerarRelatorio() {
       return mes === nomeMesFiltro && ano === anoFiltro;
     });
 
-    let status, valorPago, dataPagamento;
+    let status, valorPago, dataPagamento, acaoHtml;
+    const nomeEscapado = (crismando.nome || "").replace(/'/g, "\\'");
+
     if (pg) {
       status = "✅ Pagou";
       valorPago = parseFloat(pg.valor || 0);
-      dataPagamento = pg.data_pagamento || "-";
+      dataPagamento = formatarDataBR(extrairDataPagamentoISO(pg));
       crismandosComPagamento++;
       valorTotalMes += valorPago;
+      acaoHtml = `
+        <button onclick="estornarPagamento('${pg.id}', '${nomeEscapado}', '${nomeMesFiltro}/${anoFiltro}', ${valorPago}, 'mensal')"
+                style="background:#e74c3c;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:bold;"
+                title="Estornar/excluir este pagamento caso tenha sido lançado por engano">
+          🗑️ Estornar
+        </button>`;
     } else {
       status = "❌ Não Pagou";
       valorPago = 0;
       dataPagamento = "-";
       crismandosSemPagamento++;
+      acaoHtml = `<span style="color:#aaa;">-</span>`;
     }
 
     linhasTabela += `
@@ -340,6 +486,7 @@ function gerarRelatorio() {
         <td>${status}</td>
         <td>R$ ${valorPago.toFixed(2).replace(".", ",")}</td>
         <td>${dataPagamento}</td>
+        <td style="text-align:center;">${acaoHtml}</td>
       </tr>`;
   });
 
@@ -360,7 +507,7 @@ function gerarRelatorio() {
         <tr>
           <th>Nome</th><th>Telefone</th><th>Valor Mensal</th>
           <th>Status ${nomeMesFiltro}/${anoFiltro}</th>
-          <th>Valor Pago</th><th>Data Pagamento</th>
+          <th>Valor Pago</th><th>Data Pagamento</th><th style="text-align:center;">Ações</th>
         </tr>
       </thead>
       <tbody>${linhasTabela}</tbody>
@@ -369,6 +516,373 @@ function gerarRelatorio() {
       📅 Relatório de ${nomeMesFiltro}/${anoFiltro} gerado em:
       ${new Date().toLocaleDateString("pt-BR")} às ${new Date().toLocaleTimeString("pt-BR")}
     </p>`;
+}
+
+// ─────────────────────────────────────────────
+// 🆕 RELATÓRIO POR DIA (RASTREABILIDADE DE REUNIÃO E CAIXA)
+// ─────────────────────────────────────────────
+let valorArrecadadoDigitadoCache = "";
+let modoConferenciaCaixaCache = "dia";
+
+function obterGruposPagamentosPorDia() {
+  const mapaDias = {};
+
+  (pagamentos || []).forEach((p) => {
+    const dataIso = extrairDataPagamentoISO(p);
+    if (!mapaDias[dataIso]) {
+      mapaDias[dataIso] = {
+        dataIso,
+        dataBR: formatarDataBR(dataIso),
+        totalDia: 0,
+        qtdParcelas: 0,
+        crismandosSet: new Set(),
+        pagamentosLista: []
+      };
+    }
+    const valorNum = parseFloat(p.valor || 0) || 0;
+    mapaDias[dataIso].totalDia += valorNum;
+    mapaDias[dataIso].qtdParcelas += 1;
+    if (p.crismando_id) mapaDias[dataIso].crismandosSet.add(p.crismando_id);
+    mapaDias[dataIso].pagamentosLista.push(p);
+  });
+
+  return Object.values(mapaDias).sort((a, b) => {
+    if (a.dataIso === "Sem data") return 1;
+    if (b.dataIso === "Sem data") return -1;
+    return b.dataIso.localeCompare(a.dataIso);
+  });
+}
+
+function verRelatorioDiario(dataEscolhida = "") {
+  const elementoRelatorio = document.getElementById("relatorioGerado");
+  if (!elementoRelatorio) return;
+
+  if (!pagamentos || pagamentos.length === 0) {
+    elementoRelatorio.innerHTML = "<p>📋 Nenhum pagamento registrado ainda para gerar o relatório por dia.</p>";
+    return;
+  }
+
+  const diasComPagamento = obterGruposPagamentosPorDia();
+  if (diasComPagamento.length === 0) {
+    elementoRelatorio.innerHTML = "<p>📋 Nenhuma data de pagamento encontrada.</p>";
+    return;
+  }
+
+  let diaAtivoObj = diasComPagamento.find((d) => d.dataIso === dataEscolhida);
+  if (!diaAtivoObj) {
+    diaAtivoObj = diasComPagamento[0];
+  }
+  const dataAtiva = diaAtivoObj.dataIso;
+
+  const totalGeralSistema = (pagamentos || []).reduce((acc, p) => acc + (parseFloat(p.valor || 0) || 0), 0);
+
+  // Opções do select de datas que tiveram pagamentos
+  let opcoesSelectDatas = "";
+  let cardsDatasHtml = "";
+
+  diasComPagamento.forEach((d) => {
+    const qtdPessoas = d.crismandosSet.size;
+    const selecionado = d.dataIso === dataAtiva ? "selected" : "";
+    const totalFmt = d.totalDia.toFixed(2).replace(".", ",");
+    opcoesSelectDatas += `<option value="${d.dataIso}" ${selecionado}>📅 ${d.dataBR} — ${qtdPessoas} pessoa(s) / ${d.qtdParcelas} mês(es) — R$ ${totalFmt}</option>`;
+
+    const ativoCard = d.dataIso === dataAtiva;
+    cardsDatasHtml += `
+      <div onclick="verRelatorioDiario('${d.dataIso}')"
+           style="background:${ativoCard ? "#2c3e50" : "#ffffff"};
+                  color:${ativoCard ? "#ffffff" : "#2c3e50"};
+                  border:2px solid ${ativoCard ? "#f39c12" : "#dce1e7"};
+                  border-radius:8px;padding:10px 14px;cursor:pointer;min-width:145px;
+                  text-align:center;box-shadow:0 2px 5px rgba(0,0,0,0.06);transition:all 0.2s;">
+        <div style="font-weight:bold;font-size:14px;">📅 ${d.dataBR}</div>
+        <div style="font-size:12px;opacity:0.9;margin:3px 0;">👥 ${qtdPessoas} pessoa(s) (${d.qtdParcelas} m)</div>
+        <div style="font-weight:bold;font-size:14px;color:${ativoCard ? "#f1c40f" : "#27ae60"};">R$ ${totalFmt}</div>
+      </div>`;
+  });
+
+  // Agrupar os pagamentos do dia ativo por crismando para facilitar a conferência de quem entregou dinheiro na reunião
+  const porCrismandoNoDia = {};
+  diaAtivoObj.pagamentosLista.forEach((p) => {
+    const cid = p.crismando_id || "desconhecido";
+    if (!porCrismandoNoDia[cid]) {
+      const crisObj = (crismandos || []).find((c) => String(c.id) === String(cid));
+      porCrismandoNoDia[cid] = {
+        crismandoId: cid,
+        nome: crisObj ? crisObj.nome : `Crismando #${cid}`,
+        telefone: crisObj ? crisObj.telefone || "-" : "-",
+        itens: [],
+        valorTotalDia: 0,
+        ultimoTimestamp: 0,
+        horarioTexto: "-"
+      };
+    }
+
+    const valorParc = parseFloat(p.valor || 0) || 0;
+    const { mes, ano } = extrairMesAno(p);
+    porCrismandoNoDia[cid].itens.push({
+      id: p.id,
+      mes: mes || p.mes || "-",
+      ano: ano || p.ano || "-",
+      valor: valorParc,
+      created_at: p.created_at
+    });
+    porCrismandoNoDia[cid].valorTotalDia += valorParc;
+
+    if (p.created_at) {
+      const ts = new Date(p.created_at).getTime();
+      if (!isNaN(ts) && ts >= porCrismandoNoDia[cid].ultimoTimestamp) {
+        porCrismandoNoDia[cid].ultimoTimestamp = ts;
+        porCrismandoNoDia[cid].horarioTexto = extrairHorarioRegistro(p);
+      }
+    }
+  });
+
+  // Ordenar por horário de atendimento (mais recente ou ordem alfabética se não tiver horário)
+  const listaAtendimentosDia = Object.values(porCrismandoNoDia).sort((a, b) => {
+    if (b.ultimoTimestamp !== a.ultimoTimestamp) return b.ultimoTimestamp - a.ultimoTimestamp;
+    return a.nome.localeCompare(b.nome);
+  });
+
+  let linhasTabelaDia = "";
+  listaAtendimentosDia.forEach((item, index) => {
+    const nomeEscapado = (item.nome || "").replace(/'/g, "\\'");
+
+    // Ordenar meses cronologicamente dentro do atendimento
+    item.itens.sort((a, b) => {
+      if (parseInt(a.ano) !== parseInt(b.ano)) return parseInt(a.ano) - parseInt(b.ano);
+      return ORDEM_MESES.indexOf(a.mes) - ORDEM_MESES.indexOf(b.mes);
+    });
+
+    const badgesMesesHtml = item.itens.map((it) => {
+      const refMesAno = `${it.mes}/${it.ano}`;
+      const valItFmt = it.valor.toFixed(2).replace(".", ",");
+      return `
+        <span style="display:inline-flex;align-items:center;gap:5px;background:#e8f5e9;border:1px solid #a5d6a7;color:#1b5e20;padding:3px 8px;border-radius:12px;font-size:12px;margin:2px;">
+          <strong>${refMesAno}</strong> (R$ ${valItFmt})
+          <button onclick="estornarPagamento('${it.id}', '${nomeEscapado}', '${refMesAno}', ${it.valor}, 'diario', '${dataAtiva}')"
+                  style="background:#c62828;color:white;border:none;border-radius:50%;width:18px;height:18px;font-size:10px;line-height:18px;cursor:pointer;padding:0;text-align:center;"
+                  title="Estornar apenas o mês ${refMesAno} de ${item.nome}">✖</button>
+        </span>`;
+    }).join(" ");
+
+    const idsCsv = item.itens.map((it) => it.id).join(",");
+    const mesesResumoTexto = item.itens.map((it) => `${it.mes}/${it.ano}`).join(", ");
+    const valorTotalPessoaFmt = item.valorTotalDia.toFixed(2).replace(".", ",");
+
+    linhasTabelaDia += `
+      <tr>
+        <td style="text-align:center;color:#666;font-weight:bold;">${index + 1}</td>
+        <td><strong>${item.nome}</strong></td>
+        <td>${item.telefone}</td>
+        <td>${badgesMesesHtml}</td>
+        <td style="text-align:center;font-weight:bold;">${item.itens.length}</td>
+        <td style="color:#27ae60;font-weight:bold;font-size:14px;">R$ ${valorTotalPessoaFmt}</td>
+        <td style="text-align:center;color:#555;">${item.horarioTexto}</td>
+        <td style="text-align:center;">
+          <button onclick="estornarPagamentosDiaCrismando('${idsCsv}', '${nomeEscapado}', '${mesesResumoTexto}', ${item.valorTotalDia}, '${dataAtiva}')"
+                  style="background:#e74c3c;color:white;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:bold;"
+                  title="Estornar recebimento deste crismando neste dia">
+            🗑️ Estornar
+          </button>
+        </td>
+      </tr>`;
+  });
+
+  elementoRelatorio.innerHTML = `
+    <div style="background:#ffffff;border:2px solid #f39c12;border-radius:10px;padding:18px;margin-bottom:20px;box-shadow:0 3px 10px rgba(0,0,0,0.06);">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+        <h4 style="margin:0;color:#2c3e50;font-size:16px;">📅 Relatório por Dia e Conferência de Caixa</h4>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button onclick="baixarExcelDiario('${dataAtiva}')"
+                  style="background:#27ae60;color:white;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-weight:bold;font-size:13px;">
+            📥 Baixar Excel do Dia (${diaAtivoObj.dataBR})
+          </button>
+          <button onclick="document.getElementById('relatorioGerado').innerHTML='';"
+                  style="background:#7f8c8d;color:white;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:13px;">
+            ✖ Fechar
+          </button>
+        </div>
+      </div>
+
+      <!-- Painel de Conferência: Valor Arrecadado vs Sistema -->
+      <div style="background:#fffdf6;border:1px solid #f5d76e;border-radius:8px;padding:14px;margin-bottom:16px;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:12px;align-items:end;">
+          <div>
+            <label for="inputValorArrecadadoConferencia" style="font-size:13px;color:#2c3e50;margin-bottom:4px;">
+              💵 Valor Arrecadado (R$):
+            </label>
+            <input type="number" id="inputValorArrecadadoConferencia" step="0.01" placeholder="Digite o valor contado em mãos..."
+                   value="${valorArrecadadoDigitadoCache}"
+                   oninput="atualizarConferenciaValorArrecadado(${diaAtivoObj.totalDia}, ${totalGeralSistema}, '${diaAtivoObj.dataBR}')"
+                   style="padding:9px 12px;font-size:15px;font-weight:bold;border:2px solid #f39c12;border-radius:6px;width:100%;">
+          </div>
+          <div>
+            <label for="selectModoConferenciaCaixa" style="font-size:13px;color:#2c3e50;margin-bottom:4px;">
+              🔍 Comparar Valor Arrecadado com:
+            </label>
+            <select id="selectModoConferenciaCaixa"
+                    onchange="atualizarConferenciaValorArrecadado(${diaAtivoObj.totalDia}, ${totalGeralSistema}, '${diaAtivoObj.dataBR}')"
+                    style="padding:9px 12px;font-size:14px;border:2px solid #bdc3c7;border-radius:6px;width:100%;">
+              <option value="dia" ${modoConferenciaCaixaCache === "dia" ? "selected" : ""}>📅 Registrado no Dia (${diaAtivoObj.dataBR}): R$ ${diaAtivoObj.totalDia.toFixed(2).replace(".", ",")}</option>
+              <option value="geral" ${modoConferenciaCaixaCache === "geral" ? "selected" : ""}>🏦 Registrado Geral (Acumulado): R$ ${totalGeralSistema.toFixed(2).replace(".", ",")}</option>
+            </select>
+          </div>
+        </div>
+        <div id="resultadoConferenciaValorArrecadado" style="margin-top:12px;"></div>
+      </div>
+
+      <!-- Seletor e Cards de Datas com Pagamentos -->
+      <div style="margin-bottom:15px;">
+        <label for="selectDataRelatorioDiario" style="font-size:13px;color:#2c3e50;margin-bottom:6px;">
+          📆 Escolha a data que houve pagamentos (${diasComPagamento.length} dia(s) com registro):
+        </label>
+        <select id="selectDataRelatorioDiario" onchange="verRelatorioDiario(this.value)"
+                style="width:100%;max-width:460px;padding:9px 12px;border:2px solid #2c3e50;border-radius:6px;font-size:14px;font-weight:bold;margin-bottom:12px;">
+          ${opcoesSelectDatas}
+        </select>
+
+        <div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:6px;">
+          ${cardsDatasHtml}
+        </div>
+      </div>
+
+      <!-- Resumo do Dia Selecionado -->
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin:15px 0;">
+        <div class="stat-box" style="background:#eef6ff;padding:10px 14px;border-radius:8px;border-left:4px solid #3498db;">
+          📅 Data: <strong>${diaAtivoObj.dataBR}</strong>
+        </div>
+        <div class="stat-box" style="background:#e8f8f5;padding:10px 14px;border-radius:8px;border-left:4px solid #1abc9c;">
+          👥 Crismandos que Pagaram no Dia: <strong>${diaAtivoObj.crismandosSet.size}</strong>
+        </div>
+        <div class="stat-box" style="background:#fef9e7;padding:10px 14px;border-radius:8px;border-left:4px solid #f1c40f;">
+          📆 Mensalidades Quitadas no Dia: <strong>${diaAtivoObj.qtdParcelas}</strong>
+        </div>
+        <div class="stat-box" style="background:#eaffea;padding:10px 14px;border-radius:8px;border-left:4px solid #27ae60;">
+          💰 Total Registrado no Dia: <strong style="color:#1b5e20;font-size:15px;">R$ ${diaAtivoObj.totalDia.toFixed(2).replace(".", ",")}</strong>
+        </div>
+      </div>
+
+      <!-- Tabela Detalhada de Quem Pagou no Dia -->
+      <div class="table-container" style="margin-top:10px;">
+        <table border="1" cellpadding="6" style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead style="background:#2c3e50;color:white;">
+            <tr>
+              <th style="width:40px;text-align:center;">#</th>
+              <th>Crismando</th>
+              <th>Telefone</th>
+              <th>Mês(es) Quitado(s) neste Dia</th>
+              <th style="text-align:center;">Qtd. Meses</th>
+              <th>Valor Pago no Dia</th>
+              <th style="text-align:center;">Horário</th>
+              <th style="text-align:center;">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${linhasTabelaDia}
+          </tbody>
+        </table>
+      </div>
+
+      <p style="margin-top:10px;font-size:12px;color:#666;">
+        💡 <strong>Dica de Rastreabilidade:</strong> Se um crismando pagou mais de 1 mês no mesmo dia e você quiser estornar apenas um mês lançado por engano, clique no botão vermelho <strong>✖</strong> dentro do próprio mês. Para estornar todo o pagamento da pessoa no dia, clique em <strong>🗑️ Estornar</strong>.
+      </p>
+    </div>
+  `;
+
+  atualizarConferenciaValorArrecadado(diaAtivoObj.totalDia, totalGeralSistema, diaAtivoObj.dataBR);
+}
+
+function atualizarConferenciaValorArrecadado(totalDia, totalGeral, dataBR) {
+  const inputEl = document.getElementById("inputValorArrecadadoConferencia");
+  const selectModo = document.getElementById("selectModoConferenciaCaixa");
+  const boxResultado = document.getElementById("resultadoConferenciaValorArrecadado");
+  if (!boxResultado) return;
+
+  const modo = selectModo ? selectModo.value : "dia";
+  modoConferenciaCaixaCache = modo;
+  valorArrecadadoDigitadoCache = inputEl ? inputEl.value : "";
+
+  const valorEsperadoSistema = modo === "geral" ? totalGeral : totalDia;
+  const rotuloComparacao = modo === "geral" ? "Total Registrado Geral" : `Total Registrado no Dia (${dataBR})`;
+
+  if (!inputEl || inputEl.value.trim() === "") {
+    boxResultado.innerHTML = `
+      <div style="font-size:13px;color:#666;background:#f8f9fa;padding:8px 12px;border-radius:6px;border:1px dashed #ccc;">
+        ℹ️ Digite no campo <strong>Valor Arrecadado (R$)</strong> acima a quantia física que você tem em mãos para conferir automaticamente com o <strong>${rotuloComparacao} (R$ ${valorEsperadoSistema.toFixed(2).replace(".", ",")})</strong>.
+      </div>`;
+    return;
+  }
+
+  const valorInformado = parseFloat(inputEl.value);
+  if (isNaN(valorInformado) || valorInformado < 0) {
+    boxResultado.innerHTML = "";
+    return;
+  }
+
+  const diferenca = Math.round((valorInformado - valorEsperadoSistema) * 100) / 100;
+  const valInformadoFmt = valorInformado.toFixed(2).replace(".", ",");
+  const valSistemaFmt = valorEsperadoSistema.toFixed(2).replace(".", ",");
+  const difAbsFmt = Math.abs(diferenca).toFixed(2).replace(".", ",");
+  const valPadraoMensal = parseFloat(window.configuracoesSistema?.valor_mensal_padrao || 10) || 10;
+  const qtdMensalidadesEquiv = (Math.abs(diferenca) / valPadraoMensal).toFixed(1).replace(".0", "");
+
+  if (Math.abs(diferenca) < 0.01) {
+    boxResultado.innerHTML = `
+      <div style="background:#e8f5e9;border:1px solid #4caf50;color:#1b5e20;padding:10px 14px;border-radius:6px;font-size:13px;">
+        ✅ <strong>CAIXA BATENDO EXATO! (Diferença: R$ 0,00)</strong><br>
+        O Valor Arrecadado informado (<strong>R$ ${valInformadoFmt}</strong>) confere exatamente com o ${rotuloComparacao} (<strong>R$ ${valSistemaFmt}</strong>).
+      </div>`;
+  } else if (diferenca > 0) {
+    boxResultado.innerHTML = `
+      <div style="background:#fff8e1;border:1px solid #ffb300;color:#5d4037;padding:10px 14px;border-radius:6px;font-size:13px;">
+        ⚠️ <strong>SOBRA EM MÃOS: + R$ ${difAbsFmt} a mais do que consta no sistema</strong><br>
+        • Valor Arrecadado em Mãos: <strong>R$ ${valInformadoFmt}</strong> | ${rotuloComparacao}: <strong>R$ ${valSistemaFmt}</strong><br>
+        💡 <em>Diagnóstico: Há R$ ${difAbsFmt} (aprox. ${qtdMensalidadesEquiv} mensalidade(s)) recebidos em dinheiro que ainda <strong>não foram registrados</strong> no sistema.</em>
+      </div>`;
+  } else {
+    boxResultado.innerHTML = `
+      <div style="background:#ffebee;border:1px solid #ef5350;color:#b71c1c;padding:10px 14px;border-radius:6px;font-size:13px;">
+        🚨 <strong>FALTA EM MÃOS: - R$ ${difAbsFmt} a menos do que consta no sistema</strong><br>
+        • Valor Arrecadado em Mãos: <strong>R$ ${valInformadoFmt}</strong> | ${rotuloComparacao}: <strong>R$ ${valSistemaFmt}</strong><br>
+        💡 <em>Diagnóstico: O sistema tem R$ ${difAbsFmt} (aprox. ${qtdMensalidadesEquiv} mensalidade(s)) registrados a mais do que o dinheiro físico. Confira na tabela abaixo se algum mês foi marcado em duplicidade/engano e clique em <strong>🗑️ Estornar</strong>.</em>
+      </div>`;
+  }
+}
+
+function baixarExcelDiario(dataIso) {
+  const diasComPagamento = obterGruposPagamentosPorDia();
+  const diaObj = diasComPagamento.find((d) => d.dataIso === dataIso);
+  if (!diaObj || diaObj.pagamentosLista.length === 0) {
+    alert("Nenhum pagamento encontrado para a data selecionada.");
+    return;
+  }
+
+  const dados = [
+    ["Data do Pagamento", "Crismando", "Telefone", "Mês Quitado", "Ano", "Valor Pago (R$)", "Horário Registro"]
+  ];
+
+  diaObj.pagamentosLista.forEach((p) => {
+    const crismando = (crismandos || []).find((c) => String(c.id) === String(p.crismando_id));
+    const { mes, ano } = extrairMesAno(p);
+    dados.push([
+      diaObj.dataBR,
+      crismando ? crismando.nome : `Crismando #${p.crismando_id}`,
+      crismando ? crismando.telefone || "" : "",
+      mes || p.mes || "",
+      ano || p.ano || "",
+      parseFloat(p.valor || 0),
+      extrairHorarioRegistro(p)
+    ]);
+  });
+
+  dados.push([]);
+  dados.push(["RESUMO DO DIA", diaObj.dataBR, `Crismandos: ${diaObj.crismandosSet.size}`, `Mensalidades: ${diaObj.qtdParcelas}`, "TOTAL DO DIA:", diaObj.totalDia, ""]);
+
+  const ws = XLSX.utils.aoa_to_sheet(dados);
+  const wb = XLSX.utils.book_new();
+  const nomeAba = `Caixa_${diaObj.dataIso}`.substring(0, 31);
+  XLSX.utils.book_append_sheet(wb, ws, nomeAba);
+  XLSX.writeFile(wb, `relatorio_diario_caixa_${diaObj.dataIso}.xlsx`);
 }
 
 // ─────────────────────────────────────────────
