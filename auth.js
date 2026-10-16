@@ -5,7 +5,7 @@ class AuthSystem {
         this.currentUser = null;
         this.sessionTimeout = 30 * 60 * 1000; // 30 minutos
         this.sessionTimer = null;
-        this.maxTentativas = 3;
+        this.maxTentativas = 10;
     }
 
     // Função para hash de senha (SHA-256)
@@ -70,17 +70,44 @@ class AuthSystem {
                 throw new Error('Usuário não encontrado ou inativo');
             }
 
-            if (data.bloqueado_ate && new Date(data.bloqueado_ate) > new Date()) {
-                const tempoRestante = Math.ceil((new Date(data.bloqueado_ate) - new Date()) / 60000);
-                throw new Error(`Usuário bloqueado. Tente novamente em ${tempoRestante} minutos.`);
+            const tentativasAtuais = data.tentativas_login || 0;
+            if (tentativasAtuais >= this.maxTentativas && data.bloqueado_ate && new Date(data.bloqueado_ate) > new Date()) {
+                const tempoRestanteMin = Math.ceil((new Date(data.bloqueado_ate) - new Date()) / 60000);
+                const msgTempo = tempoRestanteMin >= 60
+                    ? `${Math.floor(tempoRestanteMin / 60)}h e ${tempoRestanteMin % 60}min`
+                    : `${tempoRestanteMin} minuto(s)`;
+                throw new Error(`Usuário bloqueado temporariamente. Tente novamente em ${msgTempo}.`);
             }
 
             if (data.senha !== senhaHash) {
-                const novasTentativas = (data.tentativas_login || 0) + 1;
+                const novasTentativas = tentativasAtuais + 1;
                 const updateData = { tentativas_login: novasTentativas };
 
-                if (novasTentativas >= this.maxTentativas) {
-                    updateData.bloqueado_ate = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+                let msgErro = '';
+                if (novasTentativas < this.maxTentativas) {
+                    updateData.bloqueado_ate = null;
+                    msgErro = `Senha incorreta. Tentativas restantes: ${this.maxTentativas - novasTentativas}`;
+                } else {
+                    let minutosBloqueio = 5;
+                    let descricaoTempo = '5 minutos';
+
+                    if (novasTentativas === 10) {
+                        minutosBloqueio = 5;
+                        descricaoTempo = '5 minutos';
+                    } else if (novasTentativas === 11) {
+                        minutosBloqueio = 10;
+                        descricaoTempo = '10 minutos';
+                    } else if (novasTentativas === 12) {
+                        minutosBloqueio = 30;
+                        descricaoTempo = '30 minutos';
+                    } else {
+                        // 13 tentativas ou mais: 3 horas (180 minutos)
+                        minutosBloqueio = 180;
+                        descricaoTempo = '3 horas';
+                    }
+
+                    updateData.bloqueado_ate = new Date(Date.now() + minutosBloqueio * 60 * 1000).toISOString();
+                    msgErro = `Senha incorreta (${novasTentativas}ª tentativa). Usuário bloqueado por ${descricaoTempo}.`;
                 }
 
                 await supabaseClient
@@ -88,7 +115,7 @@ class AuthSystem {
                     .update(updateData)
                     .eq('id', data.id);
 
-                throw new Error(`Senha incorreta. Tentativas restantes: ${this.maxTentativas - novasTentativas}`);
+                throw new Error(msgErro);
             }
 
             await supabaseClient
